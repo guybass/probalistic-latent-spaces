@@ -35,7 +35,7 @@ back local KL/cross-entropy gives the probability-dependent Fisher metric studie
 
 ## Verification status
 
-- 26 automated CPU tests pass.
+- 28 automated CPU tests pass.
 - Saturated three-category curvature recovers \(K=1/4\), including a near-boundary stress test.
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.

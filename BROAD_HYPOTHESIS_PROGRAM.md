@@ -100,6 +100,21 @@ A metric alone does not specify which semantic vector at one context is “the s
 
 Importantly, “ordinary vector reuse” is not transport-free. It is exactly parallel transport under the ambient flat connection and, at the affine softmax head, under the exponential connection.
 
+This comparison is one canonical family rather than four unrelated choices. In
+natural coordinates for the affine-softmax decoder,
+
+\[
+\nabla^{(\alpha)}_uX
+=DX[u]+\frac{1-\alpha}{2}G^{-1}C(u,X,\cdot),
+\]
+
+on the fixed-rank predictive quotient. Thus \(e\) (\(\alpha=1\)) is uncorrected
+vector reuse, LC (\(\alpha=0\)) applies half of the Fisher cubic-tensor correction,
+and \(m\) (\(\alpha=-1\)) applies the full correction. A fitted \(\alpha\) learns
+only this scalar tradeoff, not an arbitrary connection. For finite edges this is
+implemented as a first-order transport approximation unless the transport ODE is
+integrated.
+
 ### 3.4 Semantic transformation field
 
 For operation $T$, define a sampled section of the tangent bundle,

@@ -49,10 +49,23 @@ A_{i,a}v=G_i^{\dagger}C_i(a,v,\cdot).
 For $\beta=(1-\alpha)/2$, first-order alpha transport is
 
 \[
-\widetilde X_{i\to j}^{(\alpha)}
+P_{i\to j}^{(\alpha)}X_i
 =
-X_i-\beta A_{i,a_{ij}}X_i.
+X_i-\beta A_{i,a_{ij}}X_i
++O(\|a_{ij}\|^2).
 \]
+
+The implemented finite-edge surrogate drops the remainder:
+
+\[
+\widetilde X_{i\to j}^{(\alpha)}
+:=X_i-\beta A_{i,a_{ij}}X_i.
+\]
+
+The geometric statement is made on a fixed-rank predictive quotient, where
+$G_i^{\dagger}$ means the true inverse after removing predictive null directions.
+If a damped pseudoinverse is used in training, the displayed expression is a
+numerical surrogate rather than the canonical connection at a rank-changing point.
 
 The symmetric normalized consistency loss is
 

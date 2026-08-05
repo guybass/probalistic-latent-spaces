@@ -33,6 +33,31 @@ class SoftmaxGeometryTests(unittest.TestCase):
         observed = softmax_fisher_metric(self.weights, self.p)
         np.testing.assert_allclose(observed, expected, atol=1e-14)
 
+    def test_predictively_null_decoder_direction_is_exactly_quotiented(self) -> None:
+        # The second hidden coordinate adds the same scalar to every logit.
+        weights = np.array(
+            [
+                [1.0, 1.0],
+                [0.0, 1.0],
+                [-1.0, 1.0],
+            ]
+        )
+        hidden = np.array([0.4, -2.0])
+        null_direction = np.array([0.0, 1.0])
+
+        def probabilities(point: np.ndarray) -> np.ndarray:
+            logits = weights @ point
+            unnormalized = np.exp(logits - np.max(logits))
+            return unnormalized / np.sum(unnormalized)
+
+        p = probabilities(hidden)
+        shifted_p = probabilities(hidden + 17.0 * null_direction)
+        metric = softmax_fisher_metric(weights, p)
+
+        np.testing.assert_allclose(shifted_p, p, atol=1e-15)
+        np.testing.assert_allclose(metric @ null_direction, 0.0, atol=1e-15)
+        self.assertEqual(np.linalg.matrix_rank(metric, tol=1e-12), 1)
+
     def test_saturated_three_category_family_has_curvature_one_quarter(self) -> None:
         result = softmax_sectional_curvature(
             self.weights,

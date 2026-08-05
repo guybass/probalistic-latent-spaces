@@ -46,6 +46,23 @@ class SemanticFieldTests(unittest.TestCase):
         )
         np.testing.assert_array_equal(observed, self.vector)
 
+    def test_hidden_analogy_equals_exponential_distribution_composition(self) -> None:
+        hidden_p = np.array([0.2, -0.4])
+        hidden_q = np.array([-0.3, 0.7])
+        hidden_r = np.array([0.5, 0.1])
+        p = softmax_probabilities(self.weights, self.bias, hidden_p)
+        q = softmax_probabilities(self.weights, self.bias, hidden_q)
+        r = softmax_probabilities(self.weights, self.bias, hidden_r)
+
+        expected = r * q / p
+        expected /= np.sum(expected)
+        observed = softmax_probabilities(
+            self.weights,
+            self.bias,
+            hidden_r + hidden_q - hidden_p,
+        )
+        np.testing.assert_allclose(observed, expected, atol=1e-14)
+
     def test_mixture_transport_keeps_metric_lowered_components_constant(self) -> None:
         transported = alpha_parallel_transport(
             self.weights,

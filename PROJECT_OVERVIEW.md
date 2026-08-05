@@ -2,7 +2,22 @@
 
 ## The 30-second version
 
-Language-model hidden states are ordinary vectors, but those vectors also parameterize probability distributions over the next token. These two facts give the same representation two geometries:
+For a fixed context, a deterministic language model produces a hidden coordinate
+
+\[
+h(c)\in\mathbb R^d.
+\]
+
+At the output head, that coordinate indexes a categorical predictive law
+
+\[
+p_h(y)=p_\theta(Y=y\mid h).
+\]
+
+It is therefore accurate to say that $h$ is a vector **and represents, or
+parameterizes, a distribution**. It is not literally a probability measure unless
+we identify it through the decoder map $h\mapsto p_h$. These two descriptions give
+the same representation two geometries:
 
 1. a flat affine geometry, where reusing the same vector is natural;
 2. a predictive Fisher geometry, where lengths measure changes in model behavior and Levi--Civita transport can be curved.
@@ -15,12 +30,118 @@ Ordinary vector addition chooses the flat exponential connection. Fisher--Levi-C
 
 ```mermaid
 flowchart LR
-    H["Hidden state h in R^d"] --> P["Next-token distribution p(.|h)"]
+    H["Hidden coordinate h in R^d"] --> P["Discrete predictive law p(.|h)"]
     P --> G["Predictive Fisher metric G(h)"]
     G --> C["Choose transport: e, LC, m, or alpha"]
     C --> T["Transport a semantic effect across contexts"]
     T --> E["Held-out prediction and causal intervention"]
 ```
+
+## In what sense can a hidden state be a distribution?
+
+Three related objects should be kept separate.
+
+1. **A distribution represented by one state.** The softmax vector $p_h$ is an
+   exact probability distribution according to the model. Its outcomes are
+   discrete tokens, but the probabilities, and hence the point $p_h$ in the open
+   simplex, vary continuously with $h$. It is only *approximate* in the statistical
+   sense that $p_\theta(\cdot\mid c)$ approximates the unknown data conditional
+   $P(\cdot\mid c)$.
+2. **A distribution of hidden states.** Across contexts expressing a concept,
+   training examples, dropout masks, or sampled continuations, $H$ is a random
+   variable with a population law $Q(H\mid\text{concept})$. A finite dataset gives
+   only an empirical, discrete approximation to this law. This is a legitimate
+   second research object, but it is not the same object as the next-token law
+   $p_h$.
+3. **An explicitly stochastic latent variable.** A VAE or Bayesian model may output
+   a distribution $q(z\mid x)$ directly. A standard deterministic transformer does
+   not do this at each hidden layer without an additional modeling choice.
+
+The present project studies object 1 exactly and uses object 2 to sample semantic
+fields. A finite natural-language hidden-state set is only a point cloud; it acquires
+a differentiable manifold structure only after a smooth decoder/intervention map or
+an explicit interpolation assumption is supplied.
+
+More precisely, let $F:h\mapsto p_h$ be smooth and have locally constant rank
+$r$. Then $F(\mathbb R^d)$ is locally an $r$-dimensional immersed statistical
+manifold, and
+
+\[
+G_h=F^*g_{\mathrm{Fisher}}
+\]
+
+is positive semidefinite. Its null space is $\ker DF_h$: latent perturbations that
+do not change the predictive law. The effective local statistical manifold is the
+quotient by those null directions. Thus the strongest generally valid statement is:
+
+> The predictively identifiable part of a latent space inherits a statistical-manifold geometry from its decoder.
+
+It is not necessary, or generally correct, to claim that every raw latent coordinate
+is intrinsically a probability distribution.
+
+## Why the connection comparison is mathematically exact
+
+The list $e$, Levi--Civita, $m$, and learned $\alpha$ is not an arbitrary list of
+methods. For an affine softmax head, define
+
+\[
+\psi(h)=\log\sum_y\exp(b_y+w_y^\top h),\qquad
+G=\nabla^2\psi,\qquad C=\nabla^3\psi.
+\]
+
+Here $G$ is the predictive Fisher metric and $C$ is the Amari--Chentsov cubic
+tensor. In these natural hidden coordinates, the complete canonical
+$\alpha$-family has
+
+\[
+\nabla^{(\alpha)}_uX
+=DX[u]+\frac{1-\alpha}{2}
+G^{-1}C(u,X,\cdot),
+\]
+
+where $G^{-1}$ is taken on the predictively identifiable quotient. Therefore,
+along a small displacement $\delta h$,
+
+\[
+P^{(\alpha)}_{h\to h+\delta h}v
+=v-\frac{1-\alpha}{2}G^{-1}C(\delta h,v,\cdot)
++O(\|\delta h\|^2).
+\]
+
+The four hypotheses are consequently one controlled family:
+
+| Choice | Correction coefficient $(1-\alpha)/2$ | Exact interpretation |
+|---|---:|---|
+| $e$, $\alpha=1$ | $0$ | Keep the same natural-coordinate vector; ordinary addition |
+| Levi--Civita, $\alpha=0$ | $1/2$ | Metric-compatible transport; preserve Fisher inner products |
+| $m$, $\alpha=-1$ | $1$ | Keep the dual expectation-coordinate displacement constant |
+| fitted $\alpha$ | learned scalar | Estimate which member of this canonical family best fits the semantic field |
+
+Ordinary addition is exactly the $e$-case, not a geometry-free competitor. Indeed,
+
+\[
+\log\frac{p_{h+v}(i)}{p_{h+v}(j)}
+-\log\frac{p_h(i)}{p_h(j)}
+=(w_i-w_j)^\top v,
+\]
+
+which is independent of $h$. Hence $h+t v$ is an $e$-geodesic and a constant
+hidden vector is $e$-parallel at the affine head.
+
+The mathematics therefore supports **testing these transport laws**, but it does not
+prove in advance that Levi--Civita, or any other connection, is semantically better.
+It proves the tradeoff:
+
+- $e$ and $m$ are flat but generally do not preserve Fisher lengths;
+- Levi--Civita uniquely gives torsion-free Fisher-metric-compatible transport, but it
+  can be curved and path dependent;
+- no connection can have all of these Euclidean properties when the Fisher--LC
+  curvature is nonzero.
+
+At earlier transformer layers, the downstream map to logits is nonlinear, so raw
+addition need not be $e$-parallel. There the Jacobian and second derivatives of the
+remaining network must be included in the pulled-back connection. The exact
+addition--$e$ identity should therefore be claimed only at an affine softmax head.
 
 ## What we originally believed
 
@@ -75,7 +196,7 @@ This is called **connection-relative linearity**.
 
 ### Verified computationally
 
-- 26 model-free CPU tests pass.
+- 28 model-free CPU tests pass.
 - Exact categorical curvature recovers $1/4$.
 - LC transport preserves Fisher length numerically.
 - Synthetic $e$, LC, $m$, and intermediate-alpha fields are recovered by the estimator.

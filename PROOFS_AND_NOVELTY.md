@@ -77,6 +77,74 @@ N=\{u:Wu\text{ is constant across vocabulary entries}\},
 
 then directions in \(N\) do not change the distribution. The Riemannian parameter space is therefore the effective quotient \(\mathbb R^d/N\). If the Fisher matrix is full rank, this quotient is represented directly by \(\mathbb R^d\).
 
+### Proposition 1: the predictive quotient is a regular statistical manifold
+
+Let \(F(h)=\operatorname{softmax}(Wh+b)\) and let \(N\) be defined above. Then
+
+\[
+F(h)=F(h')\quad\Longleftrightarrow\quad h-h'\in N.
+\]
+
+The descended map
+
+\[
+\bar F:\mathbb R^d/N\longrightarrow\Delta^{V-1}_+
+\]
+
+is a smooth embedding onto the regular exponential family
+\(\mathcal M_{\mathrm{dec}}\). Its Fisher metric is positive definite on the
+quotient. Before quotienting, the pullback matrix is
+
+\[
+G(h)=W^\top\left(\operatorname{diag}p_h-p_hp_h^\top\right)W
+\]
+
+and \(\ker G(h)=N\) for every finite \(h\).
+
+#### Proof
+
+Softmax logits give the same distribution exactly when they differ by a scalar
+multiple of the all-ones vector. Hence
+
+\[
+F(h)=F(h')
+\iff W(h-h')\in\operatorname{span}\{\mathbf1\}
+\iff h-h'\in N.
+\]
+
+Use global log-ratio coordinates on the open simplex,
+
+\[
+\rho_i(p)=\log\frac{p_i}{p_V},\qquad i<V.
+\]
+
+Writing \(B_i^\top=w_i^\top-w_V^\top\), one obtains
+
+\[
+\rho(F(h))=Bh+\beta,
+\]
+
+where \(\ker B=N\). Thus \(B\) descends to a linear isomorphism from
+\(\mathbb R^d/N\) onto \(\operatorname{im}B\), and \(\rho^{-1}\) maps the
+corresponding affine subspace smoothly onto \(\mathcal M_{\mathrm{dec}}\). This
+proves the embedding claim.
+
+Finally,
+
+\[
+u^\top G(h)u
+=\operatorname{Var}_{Y\sim p_h}(w_Y^\top u).
+\]
+
+Every softmax probability is positive, so this variance vanishes exactly when
+\(w_y^\top u\) is constant in \(y\), namely when \(u\in N\). Therefore the
+pullback is positive semidefinite on \(\mathbb R^d\) and positive definite on the
+predictive quotient. \(\square\)
+
+This is the rigorous sense in which a decoded latent space is a statistical
+manifold. It does not turn the discrete natural hidden-state cloud into a smooth
+manifold without an interpolation assumption.
+
 ### 1.3 Natural hidden-state set
 
 \[
@@ -408,7 +476,92 @@ w_y^\top(h_r+h_q-h_p)+b_y.
 
 All log-partition terms are constants in \(y\) and disappear under normalization. \(\square\)
 
+The title also holds at the tangent level. In the natural quotient coordinates
+\([h]\in\mathbb R^d/N\), the exponential-connection coefficients vanish, so
+
+\[
+P^e_{[h_s]\to[h_t]}[v]=[v],\qquad
+\operatorname{Log}^e_{[h_p]}[h_q]=[h_q-h_p],\qquad
+\operatorname{Exp}^e_{[h_r]}[v]=[h_r+v].
+\]
+
+Consequently, Theorem 7 is precisely
+
+\[
+\operatorname{Exp}^e_{[h_r]}
+\left(P^e_{[h_p]\to[h_r]}
+\operatorname{Log}^e_{[h_p]}[h_q]\right)
+=[h_r+h_q-h_p].
+\]
+
 This is a central correction to the original thesis. Hidden addition is not geometrically meaningless; at the final linear head it is exactly the flat exponential-affine composition law. The empirical question is whether language semantics prefers that law or the metric-compatible Fisher law.
+
+This identity is exact for the representation immediately entering a fixed affine
+softmax head. At an earlier transformer layer, the remaining network is nonlinear;
+raw addition there is not generally exponential-parallel under the pulled-back
+predictive connection.
+
+### Corollary 7.1: the alpha family gives a precise correction to addition
+
+Let
+
+\[
+\psi(h)=\log\sum_y\exp(b_y+w_y^\top h),\qquad
+G=\nabla^2\psi,\qquad C=\nabla^3\psi.
+\]
+
+On the nondegenerate quotient, the Christoffel operator of the Amari
+\(\alpha\)-connection in natural coordinates is
+
+\[
+\Gamma^{(\alpha)}(u,v)
+=\frac{1-\alpha}{2}G^{-1}C(u,v,\cdot).
+\]
+
+Therefore a vector \(v\) transported along \(h(t)=h+t\varepsilon a\) satisfies
+
+\[
+P^{(\alpha)}_{h\to h+\varepsilon a}v
+=v-\varepsilon\frac{1-\alpha}{2}
+G(h)^{-1}C_h(a,v,\cdot)+O(\varepsilon^2).
+\]
+
+#### Proof
+
+In natural coordinates, the exponential coefficients vanish and the
+Levi--Civita coefficients with the final index lowered are
+\(\Gamma^{LC}_{ij,k}=C_{ijk}/2\). Under the convention
+
+\[
+g(\nabla^{(\alpha)}_XY,Z)
+=g(\nabla^{LC}_XY,Z)-\frac\alpha2C(X,Y,Z),
+\]
+
+raising the final index gives the displayed Christoffel operator. Parallel
+transport obeys
+
+\[
+\dot v(t)+\Gamma^{(\alpha)}(\dot h(t),v(t))=0.
+\]
+
+A first-order expansion at \(t=0\) gives the result. \(\square\)
+
+Thus
+
+\[
+\begin{array}{c|c|c}
+\alpha & \text{connection} & \text{first-order correction to a fixed vector}\\
+\hline
+1 & e & 0\\
+0 & LC & -\tfrac12G^{-1}C(a,v,\cdot)\\
+-1 & m & -G^{-1}C(a,v,\cdot)
+\end{array}
+\]
+
+A fitted \(\alpha\) estimates the scalar correction coefficient inside this
+canonical family; it is not an unrestricted learned connection. This is a
+connection/Christoffel correction. Curvature is detected only by noncommuting
+covariant derivatives or transport around paths/loops.
 
 ## 8. Exact price paid by the flat connections
 
