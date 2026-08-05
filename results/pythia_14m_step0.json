@@ -1,0 +1,397 @@
+{
+  "experiment": "exact final-decoder Fisher curvature and connection transfer",
+  "device": "cpu",
+  "checkpoints": [
+    {
+      "model": "EleutherAI/pythia-14m",
+      "revision": "step0",
+      "hidden_dim": 128,
+      "vocabulary_size": 50304,
+      "random_seed": 20260804,
+      "random_planes_per_context": 8,
+      "results": [
+        {
+          "design": {
+            "name": "number_x_time",
+            "p00": "Today the cat is",
+            "p10": "Today the cats are",
+            "p01": "Yesterday the cat was",
+            "p11": "Yesterday the cats were"
+          },
+          "base_entropy_nats": 10.625381049690976,
+          "top_next_tokens": [
+            {
+              "token": " opponents",
+              "probability": 0.00026440452818448436
+            },
+            {
+              "token": "openhagen",
+              "probability": 0.00019830987667433025
+            },
+            {
+              "token": "\ufffd",
+              "probability": 0.00018277544234913484
+            },
+            {
+              "token": "sensitive",
+              "probability": 0.00015922117894270798
+            },
+            {
+              "token": " ripped",
+              "probability": 0.00014936484245009436
+            }
+          ],
+          "logit_reconstruction_max_abs_error": 1.1920928955078125e-06,
+          "decoded_manifold_curvature": {
+            "feasible": true,
+            "semantic_sectional_curvature": 0.0011254330942605977,
+            "semantic_plane_gram_determinant": 0.1596356210078036,
+            "metric_condition_number": 1.2608656590957525,
+            "metric_min_eigenvalue": 0.00277750427116631,
+            "metric_max_eigenvalue": 0.003502059753505377,
+            "random_plane_curvatures": [
+              0.0008422240629523115,
+              0.000812309054480638,
+              0.0010524012399828738,
+              0.0011435680119248823,
+              0.0009307048513788461,
+              0.000796040812376839,
+              0.000761726127907157,
+              0.0007789169491207824
+            ],
+            "random_plane_mean": 0.0008897363887655412
+          },
+          "ambient_connection_composition": {
+            "predictions": [
+              {
+                "connection": "mixture",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "mixture",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "exponential",
+                "orientation": "A_along_B",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.9473428923103351,
+                "kl_target_to_prediction": 0.4685359771167439,
+                "kl_prediction_to_target": 0.4646530564115261,
+                "jensen_shannon": 0.104725795688691,
+                "top1_match": false
+              },
+              {
+                "connection": "exponential",
+                "orientation": "B_along_A",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.9473428923103351,
+                "kl_target_to_prediction": 0.4685359771167439,
+                "kl_prediction_to_target": 0.4646530564115261,
+                "jensen_shannon": 0.104725795688691,
+                "top1_match": false
+              },
+              {
+                "connection": "fisher",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "fisher",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              }
+            ],
+            "orientation_closure": {
+              "mixture": null,
+              "exponential": 0.0,
+              "fisher": null
+            }
+          }
+        },
+        {
+          "design": {
+            "name": "gender_x_number",
+            "p00": "The man is",
+            "p10": "The men are",
+            "p01": "The woman is",
+            "p11": "The women are"
+          },
+          "base_entropy_nats": 10.626450678289581,
+          "top_next_tokens": [
+            {
+              "token": "puted",
+              "probability": 0.0002312888612146247
+            },
+            {
+              "token": " Fusion",
+              "probability": 0.0002250654776499152
+            },
+            {
+              "token": "Hug",
+              "probability": 0.0002166360785217627
+            },
+            {
+              "token": "arner",
+              "probability": 0.00018895753572837333
+            },
+            {
+              "token": "VENT",
+              "probability": 0.00017891654171749185
+            }
+          ],
+          "logit_reconstruction_max_abs_error": 2.4586915969848633e-07,
+          "decoded_manifold_curvature": {
+            "feasible": true,
+            "semantic_sectional_curvature": 0.0014163862153552303,
+            "semantic_plane_gram_determinant": 0.05049119770700031,
+            "metric_condition_number": 1.270825616881565,
+            "metric_min_eigenvalue": 0.0027696879846210993,
+            "metric_max_eigenvalue": 0.003519790441625567,
+            "random_plane_curvatures": [
+              0.0011128941834396325,
+              0.0010177782803275242,
+              0.0014169994072777894,
+              0.0006241452914202635,
+              0.0009597421234331446,
+              0.0009201734375932016,
+              0.0007964770516703758,
+              0.0006503155586237008
+            ],
+            "random_plane_mean": 0.000937315666723204
+          },
+          "ambient_connection_composition": {
+            "predictions": [
+              {
+                "connection": "mixture",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "mixture",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "exponential",
+                "orientation": "A_along_B",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.48057601373906855,
+                "kl_target_to_prediction": 0.11666249112750181,
+                "kl_prediction_to_target": 0.11655824109463356,
+                "jensen_shannon": 0.028331180294726165,
+                "top1_match": false
+              },
+              {
+                "connection": "exponential",
+                "orientation": "B_along_A",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.48057601373906855,
+                "kl_target_to_prediction": 0.11666249112750181,
+                "kl_prediction_to_target": 0.11655824109463357,
+                "jensen_shannon": 0.028331180294726165,
+                "top1_match": false
+              },
+              {
+                "connection": "fisher",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "fisher",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              }
+            ],
+            "orientation_closure": {
+              "mixture": null,
+              "exponential": 0.0,
+              "fisher": null
+            }
+          }
+        },
+        {
+          "design": {
+            "name": "animal_x_number",
+            "p00": "The cat is",
+            "p10": "The cats are",
+            "p01": "The dog is",
+            "p11": "The dogs are"
+          },
+          "base_entropy_nats": 10.626559618992664,
+          "top_next_tokens": [
+            {
+              "token": " size",
+              "probability": 0.00019929825261012782
+            },
+            {
+              "token": "VENT",
+              "probability": 0.00017373887725970178
+            },
+            {
+              "token": " Fusion",
+              "probability": 0.00016999303719609062
+            },
+            {
+              "token": " Nothing",
+              "probability": 0.0001618729572682532
+            },
+            {
+              "token": "rei",
+              "probability": 0.0001574492655303484
+            }
+          ],
+          "logit_reconstruction_max_abs_error": 3.5762786865234375e-07,
+          "decoded_manifold_curvature": {
+            "feasible": true,
+            "semantic_sectional_curvature": 0.001011911651973478,
+            "semantic_plane_gram_determinant": 0.055240421639328366,
+            "metric_condition_number": 1.2684199832226593,
+            "metric_min_eigenvalue": 0.0027772488836350097,
+            "metric_max_eigenvalue": 0.0035227179823854684,
+            "random_plane_curvatures": [
+              0.0011641256081649787,
+              0.0009439412506860209,
+              0.0009517927352054689,
+              0.0011043351534102143,
+              0.0010524063608831232,
+              0.0007200377671513693,
+              0.000622490641860203,
+              0.0011150759545692152
+            ],
+            "random_plane_mean": 0.0009592756839913242
+          },
+          "ambient_connection_composition": {
+            "predictions": [
+              {
+                "connection": "mixture",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "mixture",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "p + u must lie in the open probability simplex",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "exponential",
+                "orientation": "A_along_B",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.38435795901243786,
+                "kl_target_to_prediction": 0.07431075504096324,
+                "kl_prediction_to_target": 0.0743507868298272,
+                "jensen_shannon": 0.018242806225992295,
+                "top1_match": true
+              },
+              {
+                "connection": "exponential",
+                "orientation": "B_along_A",
+                "feasible": true,
+                "failure_reason": null,
+                "fisher_distance": 0.384357959012439,
+                "kl_target_to_prediction": 0.07431075504096388,
+                "kl_prediction_to_target": 0.07435078682982652,
+                "jensen_shannon": 0.018242806225992045,
+                "top1_match": true
+              },
+              {
+                "connection": "fisher",
+                "orientation": "A_along_B",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              },
+              {
+                "connection": "fisher",
+                "orientation": "B_along_A",
+                "feasible": false,
+                "failure_reason": "the geodesic left the positive square-root orthant",
+                "fisher_distance": null,
+                "kl_target_to_prediction": null,
+                "kl_prediction_to_target": null,
+                "jensen_shannon": null,
+                "top1_match": null
+              }
+            ],
+            "orientation_closure": {
+              "mixture": null,
+              "exponential": 0.0,
+              "fisher": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

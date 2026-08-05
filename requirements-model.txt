@@ -1,0 +1,4 @@
+# Optional CPU inference dependencies for experiments/pythia_cpu_smoke.py.
+# Install a CPU-only PyTorch wheel for your platform, then:
+transformers>=5.0
+safetensors>=0.5

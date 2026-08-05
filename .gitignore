@@ -1,0 +1,7 @@
+.venv/
+**/__pycache__/
+*.pyc
+artifacts/hf_cache/
+results/*
+!results/README.md
+!results/*.json
