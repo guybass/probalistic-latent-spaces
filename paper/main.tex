@@ -46,7 +46,7 @@ Stability of Fisher Connections and Semantic Transport in Neural Representations
 \maketitle
 
 \begin{abstract}
-A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari--Chentsov tensor. We establish a stability hierarchy for comparing this geometry across models. Exact equality of predictive images preserves every Amari $\alpha$-connection, transport, curvature, and intrinsic predictive field. Uniform KL convergence alone does not imply even pointwise Fisher-metric convergence. General $\alpha$-transport is stable under uniform interiority, nondegeneracy, and $C^2$ predictive agreement, but the resulting worst-case constants are poorly adapted to large vocabularies. For the Levi--Civita connection we remove both the vocabulary-size and minimum-token-probability dependence: $C^2$ closeness of the square-root predictive maps controls the connection and transport, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies this closeness at an explicit rate. Score-moment identities show precisely what extra third-order control nonzero-$\alpha$ connections require and yield probability-floor-free formulas at affine softmax heads. Finally, conditional Fisher variance is the exact obstruction to descending a semantic effect through a noninjective predictive map; it vanishes identically when that map is injective. Constant vector reuse at an affine head is exponential transport on the ambient intervention family, so superiority of any other connection is a held-out empirical hypothesis rather than a consequence of pretraining.
+A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari--Chentsov tensor. We establish a stability hierarchy for comparing this geometry across models. Exact equality of predictive images preserves every Amari $\alpha$-connection, transport, curvature, and intrinsic predictive field. Uniform KL convergence alone does not imply even pointwise Fisher-metric convergence. General $\alpha$-transport is stable under uniform interiority, nondegeneracy, and $C^2$ predictive agreement, but the resulting worst-case constants are poorly adapted to large vocabularies. For the Levi--Civita connection we remove both the vocabulary-size and minimum-token-probability dependence: $C^2$ closeness of the square-root predictive maps controls the connection and transport, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies this closeness at an explicit rate. A boundary Bernoulli family proves that the same square-root regularity cannot control any fixed nonzero-$\alpha$ connection without additional information. Score-moment identities identify the required raised third-order moment and yield probability-floor-free formulas at affine softmax heads. Finally, conditional Fisher variance is the exact obstruction to descending a semantic effect through a noninjective predictive map; it vanishes identically when that map is injective. Constant vector reuse at an affine head is exponential transport on the ambient intervention family, so superiority of any other connection is a held-out empirical hypothesis rather than a consequence of pretraining.
 \end{abstract}
 
 \section{Introduction}
@@ -67,12 +67,12 @@ The analysis proceeds through six results:
     \item Exact predictive naturality: two identifiable parameterizations of the same predictive family preserve the Fisher metric, Amari-Chentsov tensor, every $\alpha$-connection, parallel transport, and curvature up to reparameterization; every common smooth field on the shared predictive image pulls back equivariantly.
     \item Separation of predictive and geometric convergence: a smooth, uniformly regular Bernoulli family converges uniformly in KL while its Fisher metric fails to converge at a fixed point.
     \item Quantitative $C^k$ stability: on compact uniformly interior and uniformly identifiable families, $C^2$ predictive closeness controls the defect between aligned $\alpha$-connections and the commutator of their parallel transports, while $C^3$ closeness controls curvature.
-    \item Boundary-robust Levi--Civita stability: the square-root embedding removes explicit vocabulary-size and minimum-probability factors from metric, connection, transport, and curvature bounds.
+    \item A connection-selective boundary result: square-root regularity removes explicit vocabulary-size and minimum-probability factors from Levi--Civita bounds, but a Bernoulli family proves that it cannot control any fixed nonzero-$\alpha$ connection without an additional raised-third-moment assumption.
     \item Loss-to-geometry implications under explicit regularity: integrated KL plus uniform Sobolev control of either probability coordinates or square-root coordinates yields transport convergence; the latter result is vocabulary independent for Levi--Civita transport.
     \item Semantic conditional-variance decompositions: two orthogonal identities separately isolate failure to descend through a noninjective predictive map from connection mismatch and from cross-model conditional-mean-field mismatch.
 \end{enumerate}
 
-These results define a concrete comparison protocol: choose a predictive quotient and a cross-model alignment, estimate infinitesimal semantic effects on a declared continuous chart, and compare exponential, Levi--Civita, mixture, and learned-$\alpha$ transport through commutation error and held-out behavioral transfer.
+These results define a concrete comparison protocol: choose a predictive quotient and a cross-model alignment, estimate infinitesimal semantic effects on a declared continuous chart, and compare exponential, Levi--Civita, mixture, and learned-$\alpha$ transport through commutation error and held-out behavioral transfer. The square-root sphere representation itself is classical; the contribution here is the quantitative implication--separation package and its decoder interpretation.
 
 \section{Related work}
 
@@ -430,11 +430,14 @@ where
 For a path $\gamma$ of Euclidean length $L_\gamma$,
 \begin{equation}
     \|P_\gamma^{p,\LC}-P_\gamma^{\widetilde p,\LC}\|_{\op}
-    \le L_\gamma
-    \exp\!\left(\frac{B_1B_2}{\lambda}L_\gamma\right)D_{\LC}.
+    \le L_\gamma D_{\LC}
+    \min\!\left\{
+        \exp\!\left(\frac{B_1B_2}{\lambda}L_\gamma\right),
+        \frac{B_1^2}{\lambda}
+    \right\}.
     \label{eq:sqrt-transport-bound}
 \end{equation}
-Every displayed constant is independent of $N$ and of $\min_a p_a,\min_a\widetilde p_a$.
+Every displayed constant is independent of $N$ and of $\min_a p_a,\min_a\widetilde p_a$. The second transport branch uses metric compatibility and prevents an unavoidable exponential-in-length interpretation.
 \end{theorem}
 
 \begin{proof}
@@ -451,7 +454,18 @@ The first is \eqref{eq:pullback-metric}; the second follows either from the Kosz
     \|g_p^{-1}-g_{\widetilde p}^{-1}\|_{\op}
     \le 2B_1\lambda^{-2}\delta_1,
 \end{equation}
-and each lower-index coefficient has norm at most $B_1B_2$. Raising the final index yields \eqref{eq:sqrt-connection-bound}--\eqref{eq:dlc}. The same identities give $\|\Gamma^{\LC}\|_{\op}\le B_1B_2/\lambda$. Duhamel's formula and Gronwall's inequality along $\gamma$ then give \eqref{eq:sqrt-transport-bound}.
+and each lower-index coefficient has norm at most $B_1B_2$. Raising the final index yields \eqref{eq:sqrt-connection-bound}--\eqref{eq:dlc}. The same identities give $\|\Gamma^{\LC}\|_{\op}\le B_1B_2/\lambda$, so Duhamel's formula and Gronwall's inequality give the exponential branch of \eqref{eq:sqrt-transport-bound}.
+
+For the second branch, note that
+\begin{equation}
+    \lambda I\preceq g_p,g_{\widetilde p}\preceq B_1^2I.
+\end{equation}
+Levi--Civita transport is an isometry for its own metric; hence every subpath propagator, measured in the background Euclidean norm, has operator norm at most $B_1/\sqrt\lambda$. The exact variation-of-connection identity contains one propagator from each geometry and one copy of their connection defect. Taking norms and integrating $|\dot\gamma|$ gives
+\begin{equation}
+    \|P_\gamma^{p,\LC}-P_\gamma^{\widetilde p,\LC}\|_{\op}
+    \le L_\gamma\frac{B_1^2}{\lambda}D_{\LC}.
+\end{equation}
+Taking the better of the two valid estimates proves \eqref{eq:sqrt-transport-bound}. Appendix~\ref{app:sqrt-audit} gives the full Duhamel identity and its finite-scale interpretation.
 \end{proof}
 
 \begin{corollary}[Boundary-robust Levi--Civita curvature]\label{cor:sqrt-lc-curvature}
@@ -543,7 +557,7 @@ Then
 \end{split}
 \label{eq:general-alpha-moment-bound}
 \end{equation}
-Thus square-root $C^2$ control alone determines Levi--Civita stability; a general nonzero-$\alpha$ connection additionally requires stability of the third score moment. Affine softmax structure supplies this moment directly through Proposition~\ref{prop:score-moments}.
+Thus square-root $C^2$ control alone determines Levi--Civita stability; a general nonzero-$\alpha$ connection additionally requires stability of the raised third score moment. A tokenwise probability floor is one sufficient route, not a necessary one. Affine softmax structure supplies a floor-free route directly through Proposition~\ref{prop:score-moments}.
 \end{corollary}
 
 \begin{proof}
@@ -587,7 +601,7 @@ which diverges for every $\alpha\ne0$. Thus square-root $C^2$ control and a perf
 \end{proof}
 
 \begin{remark}[Why the assumptions matter]
-The probability-coordinate constants in Theorems~\ref{thm:c2-stability} and \ref{thm:c3-curvature} diverge near $p_a=0$ because their uniform class controls derivatives of $p_a$ independently of $p_a$. This is not always an intrinsic blow-up of the pulled-back geometry: Theorem~\ref{thm:sqrt-lc-stability} captures cancellations through square-root derivatives, while Proposition~\ref{prop:score-moments} captures them through probability-weighted score moments. Rank loss remains intrinsic because raising indices requires $g^{-1}$. For nonzero $\alpha$, third score moments supply information not determined by the Fisher metric alone and must be controlled explicitly. Vocabulary independence means that no explicit $N$ occurs in the displayed constants; the derivative bounds and spectral floor must still be uniform and may deteriorate with model scale. The estimates are conditional finite-scale bounds, not numerical certificates until those quantities are measured.
+The probability-coordinate constants in Theorems~\ref{thm:c2-stability} and \ref{thm:c3-curvature} diverge near $p_a=0$ because their uniform class controls derivatives of $p_a$ independently of $p_a$. This is not always an intrinsic blow-up of the pulled-back geometry: Theorem~\ref{thm:sqrt-lc-stability} captures cancellations through square-root derivatives, while Proposition~\ref{prop:score-moments} captures them through probability-weighted score moments. Rank loss remains intrinsic because raising indices requires $g^{-1}$. For nonzero $\alpha$, the raised third score moment supplies information not determined by the Fisher metric alone and must be controlled explicitly; uniform interiority is sufficient but not logically necessary. Vocabulary independence means that no explicit $N$ occurs in the displayed constants; the derivative bounds and spectral floor must still be uniform and may deteriorate with model scale. The estimates are conditional finite-scale bounds, not numerical certificates until those quantities are measured.
 \end{remark}
 
 \section{From cross-entropy to transport under Sobolev regularity}\label{sec:risk-to-transport}
@@ -896,7 +910,7 @@ An inferential curvature study must also separate semantic structure from Fisher
 Tokenized contexts are discrete. Derivatives and connections require an explicit continuous chart, such as soft prompts, activation interventions, or a justified local manifold model.
 
 \paragraph{Boundary and rank.}
-Softmax probabilities are positive but can be extremely small. Uniform tokenwise floors are mathematically clean and practically strong, and the general-$\alpha$ probability-coordinate bound is not a useful finite-scale certificate when its constants are dominated by that floor. The square-root Levi--Civita theorem below removes this explicit dependence, and affine heads admit score-moment formulas, but Fisher rank loss remains a genuine instability. Quotienting, coarse-graining, or a preregistered horizontal-subspace analysis is necessary near rank loss; an unreported ridge changes the geometry.
+Softmax probabilities are positive but can be extremely small. Uniform tokenwise floors are mathematically clean and practically strong, and the general-$\alpha$ probability-coordinate bound is not a useful finite-scale certificate when its constants are dominated by that floor. The square-root Levi--Civita theorem removes this explicit dependence, and affine heads admit score-moment formulas, but Fisher rank loss remains a genuine instability. Quotienting, coarse-graining, or a preregistered horizontal-subspace analysis is necessary near rank loss; an unreported ridge changes the geometry.
 
 \paragraph{Architectural support.}
 The ambient affine-head family permits arbitrary interventions in its chosen hidden coordinates. Natural post-LayerNorm states satisfy architectural constraints and need not fill that family or remain on their support after vector addition. Claims about natural-state geometry therefore require a chart tangent to the reachable support or a pullback through the normalization map; ambient intervention geometry and support-intrinsic geometry must not be conflated.
@@ -917,9 +931,139 @@ Parallel transport compares tangent vectors at different points relative to a se
 
 Idealized pretraining makes convergence of conditional output distributions natural because excess cross-entropy is expected KL divergence. It does not by itself make convergence of Fisher metrics, affine connections, or curvature natural. Geometry depends on derivatives, and a regular oscillatory counterexample separates these notions.
 
-Under explicit smoothness and identifiability assumptions, stronger conclusions become provable. Predictive maps that converge in $C^2$ have convergent Amari $\alpha$-connections and parallel transports; $C^3$ convergence controls curvature. For Levi--Civita transport, square-root coordinates give vocabulary-independent bounds without a uniform probability floor, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies the missing derivative convergence. Nonzero-$\alpha$ connections require additional third-score-moment control. The semantic conditional-variance obstruction determines whether a noninjective predictive map is rich enough to support the operation; at an injective head it vanishes by construction.
+Under explicit smoothness and identifiability assumptions, stronger conclusions become provable. Predictive maps that converge in $C^2$ have convergent Amari $\alpha$-connections and parallel transports; $C^3$ convergence controls curvature. For Levi--Civita transport, square-root coordinates give vocabulary-independent bounds without a uniform probability floor, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies the missing derivative convergence. Nonzero-$\alpha$ connections require additional raised-third-score-moment control, for which a tokenwise probability floor is sufficient but not necessary. The semantic conditional-variance obstruction determines whether a noninjective predictive map is rich enough to support the operation; at an injective head it vanishes by construction.
 
 If aligned predictive maps have vanishing population KL risk together with the uniform Sobolev, boundary, and rank bounds of Theorem~\ref{thm:risk-to-transport}, their $\alpha$-transport commutators vanish. Semantic-field equivariance is a separate condition: it requires small within-model quotient variance and small cross-model conditional-mean-field mismatch. These quantities localize deviations from transfer to inadequate regularity, predictive insufficiency, field mismatch, or connection mismatch.
+
+\appendix
+
+\section{Square-root boundary calculus and finite-scale auditing}\label{app:sqrt-audit}
+
+\subsection{What the square-root sphere does and does not flatten}
+
+The classical square-root map $\psi=2\sqrt p$ sends the open categorical simplex to the positive orthant of the radius-two sphere and satisfies
+\begin{equation}
+    \sum_a\psi_a^2=4,
+    \qquad
+    g=D\psi^*D\psi.
+\end{equation}
+The ambient inner product is Euclidean, but the induced Fisher geometry is not globally Euclidean: the full simplex has Levi--Civita sectional curvature $1/4$. Thus the sphere representation supplies a Gram factorization of the metric, not a proof of intrinsic flatness.
+
+The metric and first-kind Levi--Civita coefficients,
+\begin{equation}
+    g_{ij}=\langle\partial_i\psi,\partial_j\psi\rangle,
+    \qquad
+    \Gamma^{\LC}_{ij,k}
+    =\langle\partial_{ij}\psi,\partial_k\psi\rangle,
+\end{equation}
+are polynomial contractions of first and second immersion derivatives. Raised coefficients and tangent projections still contain $g^{-1}$, so the square-root representation removes explicit tokenwise denominators but does not remove Fisher rank conditioning.
+
+For the cubic tensor, $p_a=\psi_a^2/4$ and $\partial_i p_a=(\psi_a/2)\partial_i\psi_a$ give the exact identity
+\begin{equation}
+    C_{ijk}
+    =2\sum_a
+      \frac{\partial_i\psi_a\,\partial_j\psi_a\,
+            \partial_k\psi_a}{\psi_a}.
+    \label{eq:sqrt-cubic-appendix}
+\end{equation}
+Consequently, square-root $C^2$ bounds alone do not uniformly bound $C$ near a vanishing component. Equation~\eqref{eq:sqrt-cubic-appendix} does not say that $C$ must diverge: its numerator can vanish sufficiently quickly, or structural score-moment identities can provide cancellation.
+
+\begin{proposition}[Nonzero-$\alpha$ stability criterion]\label{prop:alpha-equivalence}
+On a common chart, put $K_p=g_p^{-1}C_p$ and $K_{\widetilde p}=g_{\widetilde p}^{-1}C_{\widetilde p}$. For every fixed $\alpha\ne0$,
+\begin{align}
+    \|\Gamma_p^{(\alpha)}-\Gamma_{\widetilde p}^{(\alpha)}\|
+    &\le
+    \|\Gamma_p^{\LC}-\Gamma_{\widetilde p}^{\LC}\|
+    +\frac{|\alpha|}{2}\|K_p-K_{\widetilde p}\|,
+    \label{eq:alpha-equivalence-forward}\\
+    \|K_p-K_{\widetilde p}\|
+    &\le\frac{2}{|\alpha|}
+    \left(
+      \|\Gamma_p^{(\alpha)}-\Gamma_{\widetilde p}^{(\alpha)}\|
+      +\|\Gamma_p^{\LC}-\Gamma_{\widetilde p}^{\LC}\|
+    \right).
+    \label{eq:alpha-equivalence-reverse}
+\end{align}
+Hence, once Levi--Civita stability is known, stability of one fixed nonzero-$\alpha$ connection is equivalent to stability of the raised third score moment. No tokenwise probability floor is logically necessary.
+\end{proposition}
+
+\begin{proof}
+Both estimates are the triangle inequality applied in opposite directions to
+\begin{equation}
+    \Gamma^{(\alpha)}=\Gamma^{\LC}-\frac{\alpha}{2}K.
+\end{equation}
+\end{proof}
+
+At an affine softmax head, write
+\begin{equation}
+    S_a(u)=(w_a-\E_pw_Y)^\top u.
+\end{equation}
+Then the first two derivatives of the square-root map satisfy
+\begin{align}
+    D\psi_a[u]&=\sqrt{p_a}\,S_a(u),\label{eq:affine-sqrt-first}\\
+    D^2\psi_a[u,v]
+    &=\sqrt{p_a}\left(\frac12S_a(u)S_a(v)-g(u,v)\right).
+    \label{eq:affine-sqrt-second}
+\end{align}
+Because $\E_p[S(u)S(v)]=g(u,v)$, expansion of the squared norm gives
+\begin{equation}
+    \|D^2\psi[u,v]\|_{\ell_2}^2
+    =\frac14\E_p[S_Y(u)^2S_Y(v)^2].
+    \label{eq:b2-fourth-moment}
+\end{equation}
+Thus the missing $B_2$ envelope is measurable as a supremum of fourth score moments along the declared chart. Proposition~\ref{prop:score-moments} separately supplies the third moment needed by nonzero-$\alpha$ connections and the exact cancellation $\Gamma^{(1)}=0$ in natural affine-head coordinates.
+
+The Bernoulli family in Proposition~\ref{prop:boundary-alpha-separation} proves that the extra condition cannot be discarded in general. More invariantly, because $g=d\theta^2$ there,
+\begin{equation}
+    \|\nabla^{(\alpha)}-\nabla^{\LC}\|_g
+    =|\alpha\cot\theta|\longrightarrow\infty.
+\end{equation}
+Flat exponential or mixture coordinates do not contradict this statement: their coordinate changes become nonuniform near the boundary. The main theorems concern interior maps with no \emph{uniform} probability floor. If exact zeros or changing support are admitted, smoothness of $\psi$ must be imposed directly and the induced object is a Hellinger extension rather than an ordinary regular Fisher model on the open simplex.
+
+\subsection{Metric-compatible transport bound}
+
+Let $A=\nabla^{p,\LC}-\nabla^{\widetilde p,\LC}$. Up to the sign convention for $A$, the exact variation-of-connection identity is
+\begin{equation}
+\begin{split}
+    P^{p,\LC}_{1\leftarrow0}
+    -P^{\widetilde p,\LC}_{1\leftarrow0}
+    =-\int_0^1
+      P^{p,\LC}_{1\leftarrow t}\,
+      A_{\gamma(t)}\!\left(
+        \dot\gamma(t),
+        P^{\widetilde p,\LC}_{t\leftarrow0}\,\cdot
+      \right)\dd t.
+\end{split}
+\label{eq:lc-duhamel-appendix}
+\end{equation}
+Metric compatibility and $\lambda I\preceq g\preceq B_1^2I$ imply
+\begin{equation}
+    \|P^{\LC}_{t\leftarrow s}\|_{\op}
+    \le\frac{B_1}{\sqrt\lambda}
+\end{equation}
+for either geometry. Substitution into \eqref{eq:lc-duhamel-appendix} gives the polynomial branch of \eqref{eq:sqrt-transport-bound}.
+
+For finite-scale reporting define
+\begin{equation}
+    \tau_\gamma=\frac{B_1B_2}{\lambda}L_\gamma,
+    \qquad
+    \kappa_{\mathrm{env}}=\frac{B_1^2}{\lambda}.
+\end{equation}
+The transport theorem reads
+\begin{equation}
+    \|P_\gamma^{p,\LC}-P_\gamma^{\widetilde p,\LC}\|_{\op}
+    \le L_\gamma D_{\LC}
+       \min\{e^{\tau_\gamma},\kappa_{\mathrm{env}}\}.
+    \label{eq:finite-scale-certificate}
+\end{equation}
+At one point, $\|D\psi\|_{\op}^2=\lambda_{\max}(g)$, so pointwise-tight constants give $B_1^2/\lambda=\kappa(g)$. Uniform theorem constants instead give
+\begin{equation}
+    \kappa_{\mathrm{env}}
+    =\frac{\sup_K\lambda_{\max}(g)}
+           {\inf_K\lambda_{\min}(g)}
+    \ge\sup_K\kappa(g),
+\end{equation}
+and equality need not hold. Both quantities are relative to the declared background chart. The existing pilot reports pointwise base-state spectra but not $B_2$, $\delta_1$, $\delta_2$, or pathwise extrema. It therefore motivates a conditioning audit but cannot imply a threshold such as $B_2L_\gamma\lesssim10^{-4}$ or establish that the theorem is intrinsically short-path. A numerical certificate requires measuring every term in \eqref{eq:finite-scale-certificate} along the actual comparison path.
 
 \section*{Code and manuscript availability}
 

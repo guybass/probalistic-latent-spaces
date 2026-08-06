@@ -32,6 +32,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 
 - `src/predictive_geometry/simplex.py`: exact mixture, exponential, and Fisher--LC operations on the open categorical simplex.
 - `src/predictive_geometry/softmax.py`: exact decoder Fisher metric, cubic tensor contractions/operators, curvature commutators, and sectional curvature from vocabulary cumulants.
+- `src/predictive_geometry/stability.py`: square-root cubic diagnostics and executable finite-scale Levi--Civita stability bounds, including the metric-compatible transport refinement.
 - `src/predictive_geometry/field.py`: alpha-connection transport, local transport defect, and semantic connection fitting.
 - `src/predictive_geometry/benchmark.py`: held-out semantic quadrilateral benchmark with feasibility, Fisher error, KL/JS error, and transport metric distortion.
 - `experiments/synthetic_validation.py`: Fisher-sphere and holonomy checks.
@@ -41,7 +42,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 
 ## Verification status
 
-- 39 automated CPU tests pass.
+- 45 automated CPU tests pass.
 - Saturated three-category curvature recovers \(K=1/4\), including a near-boundary stress test.
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.
@@ -66,6 +67,6 @@ The broad “probabilistic embeddings instead of vectors” thesis is already oc
 
 The mathematical target is a vocabulary-independent stability theory:
 
-> Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general Amari alpha-connection additionally requires stable third score moments. At affine softmax heads these quantities reduce to measurable second and third decoder moments.
+> Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general nonzero Amari alpha-connection additionally requires a stable raised third score moment. A tokenwise probability floor is sufficient but not necessary; affine softmax heads provide floor-free second-, third-, and fourth-score-moment formulas.
 
 The paired empirical question is which of exponential, Levi--Civita, mixture, or an intermediate alpha-connection predicts held-out semantic tangent fields and behavioral transfer. Ordinary vector reuse is the exponential arm, not a non-geometric baseline. A non-exponential winner must survive spectrum-matched controls, length-to-zero or integrated transport, multiple seeds, and behavioral evaluation.

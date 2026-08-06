@@ -108,13 +108,58 @@ C_{ijk}=\mathbb E_p[S_iS_jS_k],
 +\frac{1-\alpha}{2}\mathbb E_p[S_iS_jS_k].
 \]
 
-Thus nonzero-alpha stability additionally requires third score-moment control. At an affine head these are centered decoder moments and the raw probability denominators cancel.
+Thus nonzero-alpha stability additionally requires control of the raised third score moment. A tokenwise probability floor is sufficient but not necessary. At an affine head these are centered decoder moments and the raw probability denominators cancel.
+
+In square-root coordinates the distinction is explicit:
+
+\[
+C_{ijk}
+=2\sum_a
+\frac{\partial_i\psi_a\,\partial_j\psi_a\,\partial_k\psi_a}
+{\psi_a}.
+\]
+
+This formula shows that square-root \(C^2\) bounds alone do not control a
+general nonzero-alpha connection near a vanishing component. It does not say
+that the tensor must diverge: its numerator can cancel the denominator, and
+affine-head score moments provide a concrete floor-free route. The paper now
+states the exact equivalence between stability of a fixed nonzero-alpha
+connection and stability of the raised cubic tensor once Levi--Civita
+stability is known.
+
+### Corrected: the Levi--Civita theorem is not intrinsically short-path
+
+The latest audit correctly noticed that the original Gronwall exponent could
+be large, but its conclusion \(B_2L_\gamma\lesssim10^{-4}\) does not follow.
+Levi--Civita transport is metric compatible. Under
+
+\[
+\lambda I\preceq g,\widetilde g\preceq B_1^2I,
+\]
+
+each subpath transport has background operator norm at most
+\(B_1/\sqrt\lambda\). The exact Duhamel identity therefore gives
+
+\[
+\|P_\gamma^{p,LC}-P_\gamma^{\widetilde p,LC}\|_{\mathrm{op}}
+\le L_\gamma\frac{B_1^2}{\lambda}D_{LC}.
+\]
+
+The manuscript now takes the minimum of this polynomial-conditioning bound and
+the generic Gronwall bound. Pointwise pilot eigenvalues still show materially
+worsening conditioning, but they are not the theorem's uniform path constants.
+The pilot did not measure \(B_2,\delta_1,\delta_2\), or along-path extrema, so it
+does not instantiate either finite-scale certificate. The protocol and code now
+make those missing measurements explicit; at an affine head \(B_2\) is linked
+exactly to a fourth score moment.
 
 ### Rejected overclaims
 
 - Exact shared-image naturality is restrictive for independent models but has direct reparameterization, duplication, and exact-distillation instances.
 - Different curvature values at selected unaligned points and planes do not rule out every possible Fisher isometry.
 - The cross-model Pythagorean decomposition needs a differentiable field alignment; exact Fisher isometry is stronger than the identity requires.
+- A large generic Gronwall exponent does not prove an intrinsic short-path barrier for Levi--Civita transport; metric compatibility supplies a nonexponential bound.
+- \(B_1^2/\lambda\) equals a condition number only for pointwise-tight constants. Uniform theorem bounds use a supremum of \(\lambda_{\max}\) and an infimum of \(\lambda_{\min}\), which need not occur together.
 - The repository URL is misspelled in English but is the actual working remote.
 
 ### Textual repairs
@@ -165,6 +210,9 @@ The code now separates and enforces:
 - condition-weighted solve-residual threshold \(10^{-4}\);
 - same-plane Fisher-orthonormalization invariance;
 - independent vocabulary-block recomputation, with a declared \(10^{-7}\) scaled curvature tolerance.
+
+The code also checks the square-root cubic identity and both branches of the
+finite-scale Levi--Civita stability certificate.
 
 All thresholds are exposed by the real-model command and stored in new result payloads. No ridge is added to the primary geometry.
 

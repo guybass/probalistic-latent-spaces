@@ -4,6 +4,11 @@ For logits ``W @ h + b``, the Fisher pullback metric on decoded hidden space is
 the Hessian of the log-partition function.  The Riemann curvature of a Hessian
 metric depends only on its third derivatives, which here are third cumulants of
 the rows of ``W`` under the predicted categorical distribution.
+
+Square-root coordinates remove explicit token-probability denominators from
+Levi--Civita quantities, but not from a generic Amari cubic tensor.  At an
+affine softmax head the apparent denominators cancel instead through centered
+decoder score moments.  These are distinct boundary-regularity mechanisms.
 """
 
 from __future__ import annotations
@@ -117,6 +122,28 @@ class SoftmaxHessianGeometry:
         )
         lowered = 0.5 * (lowered + lowered.T)
         return self.solve_metric(lowered)
+
+    def square_root_second_derivative_norm(
+        self,
+        u: ArrayLike,
+        v: ArrayLike,
+    ) -> float:
+        """Return ``||D^2(2*sqrt(p))[u,v]||_2`` exactly.
+
+        For an affine softmax head this equals
+        ``0.5 * sqrt(E_p[S_u**2 * S_v**2])``.  Directional evaluations along a
+        sampled path help estimate the theorem's ``B2`` term, but they are not
+        by themselves a uniform operator-norm certificate on a whole chart.
+        """
+
+        u_vec = _direction(u, self.hidden_dim, "u")
+        v_vec = _direction(v, self.hidden_dim, "v")
+        score_u = self.centered @ u_vec
+        score_v = self.centered @ v_vec
+        fourth_score_moment = float(
+            self.probabilities @ (score_u * score_u * score_v * score_v)
+        )
+        return 0.5 * float(np.sqrt(max(fourth_score_moment, 0.0)))
 
     def solve_metric(self, right_hand_side: ArrayLike) -> Matrix:
         """Solve a Fisher linear system subject to both numerical gates."""

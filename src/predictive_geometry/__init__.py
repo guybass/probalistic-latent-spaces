@@ -36,6 +36,11 @@ from .softmax import (
     softmax_fisher_metric,
     softmax_sectional_curvature,
 )
+from .stability import (
+    LeviCivitaStabilityBounds,
+    levi_civita_stability_bounds,
+    square_root_cubic_tensor,
+)
 from .field import (
     SemanticConnectionFit,
     alpha_parallel_transport,
@@ -75,6 +80,9 @@ __all__ = [
     "softmax_cubic_contraction",
     "softmax_fisher_metric",
     "softmax_sectional_curvature",
+    "LeviCivitaStabilityBounds",
+    "levi_civita_stability_bounds",
+    "square_root_cubic_tensor",
     "SemanticConnectionFit",
     "alpha_parallel_transport",
     "first_order_alpha_transport",

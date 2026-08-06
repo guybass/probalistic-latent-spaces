@@ -162,6 +162,24 @@ class SoftmaxGeometryTests(unittest.TestCase):
             rtol=2e-9,
         )
 
+    def test_square_root_second_derivative_is_fourth_score_moment(self) -> None:
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        score_u = geometry.centered @ self.u
+        score_v = geometry.centered @ self.v
+        guv = float(self.u @ geometry.metric @ self.v)
+        second_derivative = np.sqrt(self.p) * (
+            0.5 * score_u * score_v - guv
+        )
+        observed = geometry.square_root_second_derivative_norm(
+            self.u,
+            self.v,
+        )
+        self.assertAlmostEqual(
+            observed,
+            np.linalg.norm(second_derivative),
+            places=14,
+        )
+
     def test_degenerate_decoder_is_rejected(self) -> None:
         degenerate_weights = np.column_stack(
             (self.weights[:, 0], self.weights[:, 0])
