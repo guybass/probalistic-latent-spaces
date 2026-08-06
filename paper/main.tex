@@ -47,7 +47,7 @@ Stability of Fisher Connections and Semantic Transport in Neural Representations
 \maketitle
 
 \begin{abstract}
-A neural hidden state is an ordinary vector, but through a probabilistic decoder it also parameterizes a predictive distribution. The predictively identifiable quotient therefore inherits a Fisher metric and the canonical family of Amari $\alpha$-connections. This observation alone is classical and does not imply that models with similar cross-entropy possess similar local geometry. We make the missing implication precise. First, we prove a quantitative stability ladder: after a smooth cross-model alignment, $C^1$ closeness of predictive maps controls their Fisher metrics, $C^2$ closeness controls their $\alpha$-connections and parallel transports, and $C^3$ closeness controls curvature. Second, we give a regular Bernoulli counterexample in which excess cross-entropy converges uniformly to zero while the pullback Fisher metric does not converge. Third, under a uniform Sobolev bound, we upgrade integrated KL convergence to $C^2$ convergence and obtain an explicit loss-to-transport rate. Finally, we introduce a semantic-sufficiency obstruction. The conditional Fisher variance of a semantic predictive effect is exactly the irreducible error of every vector field that depends only on the predictive state. This yields an orthogonal decomposition of cross-model transfer error into predictive insufficiency, field mismatch, and connection mismatch. The results clarify what would make geometric convergence across independently trained models mathematically natural, what pretraining alone cannot guarantee, and how parallel transport can be tested against ordinary vector reuse without presupposing that it wins.
+A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari-Chentsov tensor. We establish four statements about comparing this geometry across models. First, two embeddings with the same predictive image are isomorphic for every Amari $\alpha$-connection, parallel transport, curvature, and every smooth field induced on that image. Second, uniform KL convergence alone does not imply geometric convergence: a uniformly interior and regular Bernoulli sequence has vanishing KL error while its pullback Fisher metric fails to converge at a fixed point. Third, on compact uniformly interior and nondegenerate families, $C^2$ predictive closeness controls the metric in $C^1$, every bounded-$\alpha$ connection, and parallel transport, while $C^3$ closeness controls curvature. With a uniform $H^s$ bound, integrated KL controls transport at rate $O(\mathcal K^\beta)$ for every $\beta<(s-2-m/2)/(2s)$. Fourth, the conditional Fisher variance of a semantic predictive effect is exactly the irreducible squared error of all fields measurable from the predictive state. Separate orthogonal decompositions isolate this obstruction from connection mismatch and from cross-model field mismatch. At an affine softmax head, constant vector reuse is exactly exponential parallel transport; the results therefore support a controlled comparison of connections without selecting one in advance.
 \end{abstract}
 
 \section{Introduction}
@@ -58,31 +58,31 @@ Modern neural networks compute with vectors while producing probability distribu
 \end{equation}
 where $\simplex$ is the interior of the categorical simplex over a vocabulary of size $N$. The hidden coordinate remains a point of $\R^d$. Nevertheless, its predictively visible component parameterizes a statistical model and inherits the Fisher geometry of the decoder.
 
-This leads to a tempting but overly strong argument. Population cross-entropy is minimized by the true conditional distribution, so two sufficiently trained models should approach the same predictions. If both models represent the same statistical manifold, their Fisher geometries should agree. Semantic transformations should then be compared by parallel transport rather than by adding the same ambient vector at every context.
+Exact equality of identifiable predictive images gives an isomorphism of their induced statistical structures. Approximate equality at the loss level is weaker: cross-entropy controls probability values on the data distribution, whereas Fisher metrics and affine connections depend on derivatives of the predictive map. Geometric equivalence also does not imply that a semantic operation is determined by the next-token distribution, because hidden states can contain decoder-null or semantically relevant fiber directions.
 
-Each step requires qualification. Cross-entropy controls probability values on the data distribution, whereas Fisher metrics and affine connections depend on derivatives of the predictive map. Hidden states also contain decoder-null directions, and a semantic transformation need not be determined by the next-token distribution. Finally, ordinary vector addition is not geometry-free: at a linear softmax head it is exactly the affine operation selected by the flat exponential connection. The scientific question is therefore not ``vectors or manifolds,'' but which connection, if any, makes a semantic effect transferable across contexts and models.
+At a linear softmax head, constant hidden-vector reuse is exactly the affine operation selected by the flat exponential connection. Ordinary addition is therefore one connection-dependent rule rather than an alternative to geometry. The resulting question is which connection, if any, makes a specified semantic effect transferable across contexts and models.
 
-This paper formalizes that question. Our contributions are:
+The analysis proceeds through five results:
 
 \begin{enumerate}[leftmargin=*,itemsep=0.35em]
-    \item We state the exact predictive-naturality result that serves as the classical baseline: two identifiable parameterizations of the same predictive family preserve the Fisher metric, Amari-Chentsov tensor, every $\alpha$-connection, parallel transport, curvature, and intrinsic semantic fields up to reparameterization.
-    \item We show that predictive loss convergence is strictly weaker than geometric convergence. A smooth, uniformly regular Bernoulli family converges uniformly in KL while its Fisher metric fails to converge at a fixed point.
-    \item We prove quantitative $C^k$ stability bounds. On compact uniformly interior and uniformly identifiable families, $C^2$ predictive closeness controls the defect between aligned $\alpha$-connections and the commutator of their parallel transports. $C^3$ closeness controls curvature.
-    \item We bridge population loss and geometry under an explicit regularity hypothesis. Integrated KL convergence plus a uniform $H^s$ bound implies $C^2$ convergence by Sobolev interpolation, and hence convergence of $\alpha$-parallel transport with a quantitative rate.
-    \item We prove a semantic conditional-variance decomposition. It separates failure of a semantic effect to descend to the predictive quotient from failure of a chosen connection and from genuine cross-model field mismatch.
+    \item Exact predictive naturality: two identifiable parameterizations of the same predictive family preserve the Fisher metric, Amari-Chentsov tensor, every $\alpha$-connection, parallel transport, and curvature up to reparameterization; every common smooth field on the shared predictive image pulls back equivariantly.
+    \item Separation of predictive and geometric convergence: a smooth, uniformly regular Bernoulli family converges uniformly in KL while its Fisher metric fails to converge at a fixed point.
+    \item Quantitative $C^k$ stability: on compact uniformly interior and uniformly identifiable families, $C^2$ predictive closeness controls the defect between aligned $\alpha$-connections and the commutator of their parallel transports, while $C^3$ closeness controls curvature.
+    \item A loss-to-geometry implication under explicit regularity: integrated KL convergence plus a uniform $H^s$ bound implies $C^2$ convergence by Sobolev interpolation, and hence convergence of $\alpha$-parallel transport with a quantitative rate.
+    \item Semantic conditional-variance decompositions: two orthogonal identities separately isolate failure to descend to the predictive quotient from connection mismatch and from cross-model conditional-mean-field mismatch.
 \end{enumerate}
 
-The exact naturality statements and the analytic tools used in the proofs are classical. The differentiated contribution is their explicit quotient-aware synthesis into a predictive-map-to-$\alpha$-transport stability theory and a semantic-sufficiency test for neural representations. We do not claim a first Fisher geometry of neural latent space, nor do we claim that parallel transport is universally better than vector addition.
+These results define a concrete comparison protocol: choose a predictive quotient and a cross-model alignment, estimate semantic effects on that quotient, and compare exponential, Levi-Civita, mixture, and learned-$\alpha$ transport through commutation error and behavioral transfer.
 
-\section{Related work and novelty boundary}
+\section{Related work}
 
 Information geometry equips regular statistical models with the Fisher metric, the Amari-Chentsov cubic tensor, and dual affine connections \citep{amariNagaoka2000,amari2016,ayEtAl2018parametrized}. Invariance under sufficient statistics and the uniqueness of the Fisher and Amari-Chentsov tensors are classical \citep{cencov1982,ayJostLeSchwachhofer2015}. The distinction between affine flatness and Levi-Civita flatness is standard; global exponential or mixture coordinates do not force zero Riemannian curvature \citep{calinUdriste2014}.
 
-Pullback geometry in learned latent spaces is also established. \citet{arvanitidisEtAl2022} pull Fisher-Rao geometry through probabilistic decoders. \citet{zhang2025} explicitly connects a language model's hidden-to-predictive map, likelihood training, and pullback geometry. For softmax representations, \citet{parkEtAl2026} develop an information-geometric account of probing and steering, while \citet{wangZhao2026} pull the output Fisher metric through transformer layers and show large deviations from ambient Euclidean geometry. Thus neither probabilistic latent geometry nor Fisher-aware steering is new here.
+Pullback geometry in learned latent spaces is also established. \citet{arvanitidisEtAl2022} pull Fisher-Rao geometry through probabilistic decoders. \citet{zhang2025} explicitly connects a language model's hidden-to-predictive map, likelihood training, and pullback geometry. For softmax representations, \citet{parkEtAl2026} develop an information-geometric account of probing and steering, while \citet{wangZhao2026} pull the output Fisher metric through transformer layers and show large deviations from ambient Euclidean geometry. These results provide the decoder-side geometric setting used below.
 
-Cross-model representation convergence has been studied from several directions. The Platonic Representation Hypothesis proposes convergence toward shared statistical structure \citep{huhEtAl2024}. \citet{yuEtAl2025} align distinct neural latent geometries with pullback metrics and relative geodesic representations. \citet{huNiuVarma2026} model contextual transformations as vector fields and report shared displacement structure across language-model families. Path dependence and holonomy have also been proposed as representation diagnostics \citep{sevetlidisPavlidis2026}. These works motivate, but do not supply, the stability implication studied here.
+Cross-model representation convergence has been studied from several directions. The Platonic Representation Hypothesis proposes convergence toward shared statistical structure \citep{huhEtAl2024}. \citet{yuEtAl2025} align distinct neural latent geometries with pullback metrics and relative geodesic representations. \citet{huNiuVarma2026} model contextual transformations as vector fields and report shared displacement structure across language-model families. Path dependence and holonomy have also been proposed as representation diagnostics \citep{sevetlidisPavlidis2026}. The stability analysis below asks when predictive agreement forces agreement of connection-dependent transport.
 
-Continuity of Fisher information is known to require control of both distributions and their derivatives; \citet{rezakhaniHassaniAlipour2019} prove such bounds in classical and quantum settings. Quantitative relaxations of sufficient statistics based on bi-Lipschitz Fisher metrics are studied by \citet{yamaguchiNozawa2024}. Our narrow target is different: after a comparison diffeomorphism, we propagate predictive-map closeness through every Amari $\alpha$-connection to an explicit parallel-transport commutator bound, then derive the required derivative closeness from KL under Sobolev regularity.
+Continuity of Fisher information requires control of both distributions and their derivatives; \citet{rezakhaniHassaniAlipour2019} prove such bounds in classical and quantum settings. Quantitative relaxations of sufficient statistics based on bi-Lipschitz Fisher metrics are studied by \citet{yamaguchiNozawa2024}. Here a fixed comparison diffeomorphism aligns the predictive maps; their closeness is then propagated through every Amari $\alpha$-connection to an explicit parallel-transport commutator bound. Sobolev regularity supplies the derivative control needed to derive this closeness from KL convergence.
 
 \section{Predictive statistical manifolds}
 
@@ -162,7 +162,7 @@ Thus hidden vector arithmetic at the final affine head is exactly exponential tr
 
 \section{Exact predictive naturality}
 
-We first state the exact result. It is classical reparameterization naturality and serves as a baseline rather than a novelty claim.
+Exact predictive equivalence determines the corresponding metric, tensors, connections, and transports.
 
 \begin{theorem}[Exact predictive naturality]\label{thm:exact-naturality}
 Let $F_A:M_A\to\simplex$ and $F_B:M_B\to\simplex$ be smooth embeddings onto the same embedded predictive image $P$. Define
@@ -460,7 +460,7 @@ If $s>3+m/2$, the same argument combined with Theorem~\ref{thm:c3-curvature} giv
     0<\beta<\frac{s-3-m/2}{2s}.
 \end{equation}
 
-The uniform Sobolev hypothesis is strong but transparent. It rules out the high-frequency behavior in Proposition~\ref{prop:counterexample}. For language models it should be tested on low-dimensional continuous intervention charts, such as soft-prompt paths or controlled activation subspaces, rather than assumed on the discrete set of tokenized contexts.
+The uniform Sobolev hypothesis excludes the high-frequency behavior in Proposition~\ref{prop:counterexample}. For language models it should be tested on low-dimensional continuous intervention charts, such as soft-prompt paths or controlled activation subspaces, rather than assumed on the discrete set of tokenized contexts.
 
 \section{The semantic-sufficiency obstruction}\label{sec:semantic-obstruction}
 
@@ -545,7 +545,7 @@ Then
 \end{equation}
 \end{corollary}
 
-No choice of $\alpha$ can reduce the first term of \eqref{eq:connection-decomposition}. Therefore a large conditional variance falsifies the claim that the next-token predictive manifold is a sufficient semantic state for $T$ before exponential, Levi-Civita, mixture, or learned-$\alpha$ transport is compared.
+No choice of $\alpha$ can reduce the first term of \eqref{eq:connection-decomposition}. A strictly positive population conditional Fisher variance therefore proves that no predictive-state-only field, and hence no choice of $\alpha$-transport on that quotient, can represent the specified infinitesimal effect exactly.
 
 \section{Operational tests and training implications}
 
@@ -575,17 +575,17 @@ Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive 
 
 \subsection{Selecting the connection}
 
-At a linear softmax head, $\alpha=1$ is ordinary vector reuse, $\alpha=0$ is Fisher-metric-compatible Levi-Civita transport, and $\alpha=-1$ is mixture transport. A semantic field $X_T$ can be evaluated through
+At a linear softmax head, $\alpha=1$ is ordinary vector reuse, $\alpha=0$ is Fisher-metric-compatible Levi-Civita transport, and $\alpha=-1$ is mixture transport. A predictive semantic field $Y_T$ can be evaluated through
 \begin{equation}
-    \mathcal R_T(\alpha)=\E\|\nabla^{(\alpha)}X_T\|_g^2.
+    \mathcal R_T(\alpha)=\E\|\nabla^{(\alpha)}Y_T\|_g^2.
 \end{equation}
-The correct interpretation is comparative:
+The minimizer is interpreted relative to the tested field and chart:
 \begin{itemize}[leftmargin=*]
-    \item exponential transport winning supports context-independent natural-coordinate vectors for the tested operation;
-    \item Levi-Civita winning supports preservation of predictive Fisher geometry;
-    \item mixture or an intermediate $\alpha$ winning supports probabilistic affine structure without privileging metric compatibility;
-    \item every connection failing, together with a large conditional variance in \eqref{eq:descent-obstruction}, falsifies sufficiency of the predictive quotient;
-    \item every connection failing with small conditional variance motivates a richer, operation-specific connection or nonparallel field model.
+    \item a minimum at the exponential connection means that the tested field is closest to exponential-parallel; at the affine softmax head this is constant natural-coordinate vector reuse;
+    \item a minimum at the Levi-Civita connection means that the tested field is closest to the metric-compatible transport;
+    \item a minimum at the mixture or an intermediate $\alpha$ identifies the corresponding affine connection as the closest member of the tested family; intermediate $\alpha$-connections need not be flat;
+    \item positive population conditional variance proves predictive insufficiency independently of the minimizing connection;
+    \item small estimated conditional variance together with large residuals for every tested $\alpha$ motivates an operation-specific connection or a nonparallel field model.
 \end{itemize}
 
 \subsection{Training regimes}
@@ -599,7 +599,7 @@ The risk-to-transport theorem indicates why derivative regularity matters. A cau
     +\nu\mathcal R_{\mathrm{smooth}}.
     \label{eq:training-objective}
 \end{equation}
-The first regularizer encourages the operation to descend to the predictive quotient. The second selects connection-relative consistency. The final term controls the derivative oscillations excluded by Theorem~\ref{thm:risk-to-transport}. Behavioral improvement, rather than a smaller geometric regularizer alone, must be the primary outcome.
+The first regularizer encourages the operation to descend to the predictive quotient. The second selects connection-relative consistency. The final term is intended to enforce the Sobolev-type regularity required by Theorem~\ref{thm:risk-to-transport}; applying the theorem requires verifying the corresponding uniform bound. The empirical protocol treats behavioral improvement as the primary outcome and the geometric regularizers as diagnostic quantities.
 
 A no-GPU pilot can use frozen small models and one- or two-dimensional soft-prompt charts. Finite differences estimate $F$, $\partial F$, and $\partial^2F$; the model's output head provides exact vocabulary probabilities. The main comparisons are output KL, metric defect, the transport score \eqref{eq:pt-score}, semantic conditional variance, and held-out intervention transfer.
 
@@ -620,8 +620,8 @@ Equation \eqref{eq:ce-decomposition} concerns population risk, realizability, an
 \paragraph{Alignment is not identified automatically.}
 The stability theorem evaluates a proposed $\Phi$. Constructing a statistically identifiable alignment from finite observations, especially across different latent dimensions, is a separate problem. One may instead work on a shared low-dimensional intervention chart.
 
-\paragraph{No universal superiority claim.}
-Parallel transport compares tangent vectors at different points once a connection is selected. It does not make ambient vector addition invalid. At the final affine softmax head, addition is exactly exponential-affine transport. The preferred connection can depend on the operation, layer, and task.
+\paragraph{Connection dependence.}
+Parallel transport compares tangent vectors at different points relative to a selected connection. At the final affine softmax head, ambient addition coincides with exponential-affine transport, while Levi-Civita and mixture transport preserve different structures. The theory therefore evaluates connection choice separately across operations, layers, and tasks.
 
 \section{Conclusion}
 
@@ -629,7 +629,7 @@ Idealized pretraining makes convergence of conditional output distributions natu
 
 Under explicit smoothness and identifiability assumptions, the stronger conclusion becomes provable. Predictive maps that converge in $C^2$ have convergent Amari $\alpha$-connections and parallel transports; $C^3$ convergence controls curvature. Integrated KL plus a uniform Sobolev bound supplies the missing derivative convergence and yields a quantitative loss-to-transport theorem. The semantic conditional-variance obstruction then determines whether the predictive quotient is rich enough to support the operation at all.
 
-The resulting research hypothesis is precise and falsifiable: independently trained models that estimate the same smooth predictive system should, after quotienting and alignment, exhibit small $\alpha$-transport commutators and equivariant semantic fields. Failure can be localized to inadequate regularity, predictive insufficiency, field mismatch, or connection mismatch. This is a stronger and more useful claim than saying that latent spaces are ``really'' probabilistic rather than linear.
+If aligned predictive maps have vanishing population KL risk together with the uniform Sobolev, boundary, and rank bounds of Theorem~\ref{thm:risk-to-transport}, their $\alpha$-transport commutators vanish. Semantic-field equivariance is a separate condition: it requires small within-model quotient variance and small cross-model conditional-mean-field mismatch. These quantities localize deviations from transfer to inadequate regularity, predictive insufficiency, field mismatch, or connection mismatch.
 
 \section*{Code and manuscript availability}
 

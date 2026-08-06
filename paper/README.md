@@ -4,14 +4,12 @@
 
 > **From Predictive Agreement to Geometric Agreement: Stability of Fisher Connections and Semantic Transport in Neural Representations**
 
-The paper makes four narrow claims:
+The paper develops four connected results:
 
 1. predictive-map agreement propagates quantitatively to Fisher metrics, Amari alpha-connections, parallel transport, and curvature under explicit regularity assumptions;
 2. cross-entropy convergence alone does not imply geometric convergence;
 3. cross-entropy plus uniform Sobolev regularity implies parallel-transport convergence at an explicit rate;
 4. conditional Fisher variance is the irreducible obstruction to representing a semantic operation as a field on the predictive quotient.
-
-It deliberately does **not** claim the first probabilistic latent geometry, Fisher pullback, semantic vector field, or representation holonomy.
 
 ## Build
 
