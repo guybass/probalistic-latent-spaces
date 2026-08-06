@@ -1,0 +1,644 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage[colorlinks=true,allcolors=blue!55!black]{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newtheorem{example}[theorem]{Example}
+
+\newcommand{\simplex}{\Delta_{N}^{\circ}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\KL}{D_{\mathrm{KL}}}
+\newcommand{\LC}{\mathrm{LC}}
+\newcommand{\FR}{\mathrm{FR}}
+\newcommand{\AC}{\mathrm{AC}}
+\newcommand{\op}{\mathrm{op}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Exp}{\operatorname{Exp}}
+\newcommand{\Log}{\operatorname{Log}}
+\newcommand{\dd}{\mathrm{d}}
+
+\title{From Predictive Agreement to Geometric Agreement:\\
+Stability of Fisher Connections and Semantic Transport in Neural Representations}
+\author{Guy Basson\\
+\texttt{guy-shal.huji.ac.il@mail.huji.ac.il}}
+\date{August 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+A neural hidden state is an ordinary vector, but through a probabilistic decoder it also parameterizes a predictive distribution. The predictively identifiable quotient therefore inherits a Fisher metric and the canonical family of Amari $\alpha$-connections. This observation alone is classical and does not imply that models with similar cross-entropy possess similar local geometry. We make the missing implication precise. First, we prove a quantitative stability ladder: after a smooth cross-model alignment, $C^1$ closeness of predictive maps controls their Fisher metrics, $C^2$ closeness controls their $\alpha$-connections and parallel transports, and $C^3$ closeness controls curvature. Second, we give a regular Bernoulli counterexample in which excess cross-entropy converges uniformly to zero while the pullback Fisher metric does not converge. Third, under a uniform Sobolev bound, we upgrade integrated KL convergence to $C^2$ convergence and obtain an explicit loss-to-transport rate. Finally, we introduce a semantic-sufficiency obstruction. The conditional Fisher variance of a semantic predictive effect is exactly the irreducible error of every vector field that depends only on the predictive state. This yields an orthogonal decomposition of cross-model transfer error into predictive insufficiency, field mismatch, and connection mismatch. The results clarify what would make geometric convergence across independently trained models mathematically natural, what pretraining alone cannot guarantee, and how parallel transport can be tested against ordinary vector reuse without presupposing that it wins.
+\end{abstract}
+
+\section{Introduction}
+
+Modern neural networks compute with vectors while producing probability distributions. For an autoregressive language model, a hidden state $h$ entering the output head determines
+\begin{equation}
+    F(h)=p(\cdot\mid h)\in\simplex,
+\end{equation}
+where $\simplex$ is the interior of the categorical simplex over a vocabulary of size $N$. The hidden coordinate remains a point of $\R^d$. Nevertheless, its predictively visible component parameterizes a statistical model and inherits the Fisher geometry of the decoder.
+
+This leads to a tempting but overly strong argument. Population cross-entropy is minimized by the true conditional distribution, so two sufficiently trained models should approach the same predictions. If both models represent the same statistical manifold, their Fisher geometries should agree. Semantic transformations should then be compared by parallel transport rather than by adding the same ambient vector at every context.
+
+Each step requires qualification. Cross-entropy controls probability values on the data distribution, whereas Fisher metrics and affine connections depend on derivatives of the predictive map. Hidden states also contain decoder-null directions, and a semantic transformation need not be determined by the next-token distribution. Finally, ordinary vector addition is not geometry-free: at a linear softmax head it is exactly the affine operation selected by the flat exponential connection. The scientific question is therefore not ``vectors or manifolds,'' but which connection, if any, makes a semantic effect transferable across contexts and models.
+
+This paper formalizes that question. Our contributions are:
+
+\begin{enumerate}[leftmargin=*,itemsep=0.35em]
+    \item We state the exact predictive-naturality result that serves as the classical baseline: two identifiable parameterizations of the same predictive family preserve the Fisher metric, Amari-Chentsov tensor, every $\alpha$-connection, parallel transport, curvature, and intrinsic semantic fields up to reparameterization.
+    \item We show that predictive loss convergence is strictly weaker than geometric convergence. A smooth, uniformly regular Bernoulli family converges uniformly in KL while its Fisher metric fails to converge at a fixed point.
+    \item We prove quantitative $C^k$ stability bounds. On compact uniformly interior and uniformly identifiable families, $C^2$ predictive closeness controls the defect between aligned $\alpha$-connections and the commutator of their parallel transports. $C^3$ closeness controls curvature.
+    \item We bridge population loss and geometry under an explicit regularity hypothesis. Integrated KL convergence plus a uniform $H^s$ bound implies $C^2$ convergence by Sobolev interpolation, and hence convergence of $\alpha$-parallel transport with a quantitative rate.
+    \item We prove a semantic conditional-variance decomposition. It separates failure of a semantic effect to descend to the predictive quotient from failure of a chosen connection and from genuine cross-model field mismatch.
+\end{enumerate}
+
+The exact naturality statements and the analytic tools used in the proofs are classical. The differentiated contribution is their explicit quotient-aware synthesis into a predictive-map-to-$\alpha$-transport stability theory and a semantic-sufficiency test for neural representations. We do not claim a first Fisher geometry of neural latent space, nor do we claim that parallel transport is universally better than vector addition.
+
+\section{Related work and novelty boundary}
+
+Information geometry equips regular statistical models with the Fisher metric, the Amari-Chentsov cubic tensor, and dual affine connections \citep{amariNagaoka2000,amari2016,ayEtAl2018parametrized}. Invariance under sufficient statistics and the uniqueness of the Fisher and Amari-Chentsov tensors are classical \citep{cencov1982,ayJostLeSchwachhofer2015}. The distinction between affine flatness and Levi-Civita flatness is standard; global exponential or mixture coordinates do not force zero Riemannian curvature \citep{calinUdriste2014}.
+
+Pullback geometry in learned latent spaces is also established. \citet{arvanitidisEtAl2022} pull Fisher-Rao geometry through probabilistic decoders. \citet{zhang2025} explicitly connects a language model's hidden-to-predictive map, likelihood training, and pullback geometry. For softmax representations, \citet{parkEtAl2026} develop an information-geometric account of probing and steering, while \citet{wangZhao2026} pull the output Fisher metric through transformer layers and show large deviations from ambient Euclidean geometry. Thus neither probabilistic latent geometry nor Fisher-aware steering is new here.
+
+Cross-model representation convergence has been studied from several directions. The Platonic Representation Hypothesis proposes convergence toward shared statistical structure \citep{huhEtAl2024}. \citet{yuEtAl2025} align distinct neural latent geometries with pullback metrics and relative geodesic representations. \citet{huNiuVarma2026} model contextual transformations as vector fields and report shared displacement structure across language-model families. Path dependence and holonomy have also been proposed as representation diagnostics \citep{sevetlidisPavlidis2026}. These works motivate, but do not supply, the stability implication studied here.
+
+Continuity of Fisher information is known to require control of both distributions and their derivatives; \citet{rezakhaniHassaniAlipour2019} prove such bounds in classical and quantum settings. Quantitative relaxations of sufficient statistics based on bi-Lipschitz Fisher metrics are studied by \citet{yamaguchiNozawa2024}. Our narrow target is different: after a comparison diffeomorphism, we propagate predictive-map closeness through every Amari $\alpha$-connection to an explicit parallel-transport commutator bound, then derive the required derivative closeness from KL under Sobolev regularity.
+
+\section{Predictive statistical manifolds}
+
+\subsection{The categorical simplex}
+
+Let
+\begin{equation}
+    \simplex=\left\{p\in\R^N:p_a>0,\ \sum_{a=1}^N p_a=1\right\}.
+\end{equation}
+For tangent vectors $u,v,w$ satisfying $\sum_a u_a=\sum_a v_a=\sum_a w_a=0$, define
+\begin{align}
+    g_p^{\Delta}(u,v)&=\sum_{a=1}^N\frac{u_av_a}{p_a},\label{eq:simplex-fisher}\\
+    C_p^{\Delta}(u,v,w)&=\sum_{a=1}^N\frac{u_av_aw_a}{p_a^2}.\label{eq:simplex-cubic}
+\end{align}
+These are the Fisher metric and Amari-Chentsov tensor. A smooth predictive map
+\begin{equation}
+    F:M\longrightarrow\simplex
+\end{equation}
+induces
+\begin{equation}
+    g_F=F^*g^{\Delta},\qquad C_F=F^*C^{\Delta}.
+\end{equation}
+When $F$ is an immersion, $g_F$ is a Riemannian metric. In local coordinates $x=(x^1,\ldots,x^m)$, writing $p_a=F_a(x)$,
+\begin{align}
+    (g_F)_{ij}&=\sum_a\frac{\partial_i p_a\,\partial_j p_a}{p_a},\label{eq:pullback-metric}\\
+    (C_F)_{ijk}&=\sum_a\frac{\partial_i p_a\,\partial_j p_a\,\partial_k p_a}{p_a^2}.\label{eq:pullback-cubic}
+\end{align}
+
+Raise the final index of $C_F$ using $g_F$ and define $K_F$ by
+\begin{equation}
+    g_F(K_F(X,Y),Z)=C_F(X,Y,Z).
+\end{equation}
+We use the convention
+\begin{equation}
+    \nabla_F^{(\alpha)}=\nabla_F^{\LC}-\frac{\alpha}{2}K_F.
+    \label{eq:alpha-connection}
+\end{equation}
+Thus $\alpha=0$ is Levi-Civita, while $\alpha=1$ and $\alpha=-1$ are the exponential and mixture connections on a regular exponential family.
+
+\subsection{Predictive quotients}
+
+Neural predictive maps are commonly nonidentifiable. Define
+\begin{equation}
+    h\sim_F h'\quad\Longleftrightarrow\quad F(h)=F(h').
+\end{equation}
+When the fibers are regular, the identifiable state space is the quotient $M_F=M/{\sim_F}$. All geometric statements below concern this quotient or a chosen horizontal subbundle on which the pullback metric is nondegenerate.
+
+For a linear softmax decoder,
+\begin{equation}
+    F(h)=\operatorname{softmax}(Wh+b),
+\end{equation}
+the null space is
+\begin{equation}
+    \mathcal N=\{u:Wu\in\operatorname{span}\{\bm 1\}\}.
+\end{equation}
+The quotient $\R^d/\mathcal N$ embeds smoothly into the simplex, and before quotienting
+\begin{equation}
+    G(h)=W^\top\bigl(\operatorname{diag}p_h-p_hp_h^\top\bigr)W,
+    \qquad \ker G(h)=\mathcal N.
+\end{equation}
+This is the rigorous sense in which the predictively identifiable component of a hidden space is a statistical manifold. A finite set of naturally occurring hidden states remains a point cloud unless a smooth intervention chart or interpolation model is supplied.
+
+\subsection{Ordinary addition selects a connection}
+
+For the affine softmax family
+\begin{equation}
+    p_h(a)=\exp\bigl(w_a^\top h+b_a-A(h)\bigr),
+\end{equation}
+natural hidden coordinates are exponential-affine. Therefore constant coordinate vectors are $\nabla^{(1)}$-parallel. More explicitly,
+\begin{equation}
+    p_{h_r+h_q-h_p}(a)
+    =\frac{p_{h_r}(a)p_{h_q}(a)/p_{h_p}(a)}
+    {\sum_b p_{h_r}(b)p_{h_q}(b)/p_{h_p}(b)}.
+    \label{eq:e-analogy}
+\end{equation}
+Thus hidden vector arithmetic at the final affine head is exactly exponential transport, not the absence of geometry. Levi-Civita transport instead preserves Fisher lengths and angles, while mixture transport preserves the dual affine structure. Which connection best models a semantic operation is an empirical question.
+
+\section{Exact predictive naturality}
+
+We first state the exact result. It is classical reparameterization naturality and serves as a baseline rather than a novelty claim.
+
+\begin{theorem}[Exact predictive naturality]\label{thm:exact-naturality}
+Let $F_A:M_A\to\simplex$ and $F_B:M_B\to\simplex$ be smooth embeddings onto the same embedded predictive image $P$. Define
+\begin{equation}
+    \Phi=F_B^{-1}\circ F_A:M_A\longrightarrow M_B.
+\end{equation}
+Then
+\begin{equation}
+    \Phi^*g_B=g_A,\qquad \Phi^*C_B=C_A.
+\end{equation}
+For every $\alpha\in\R$,
+\begin{equation}
+    \dd\Phi\bigl(\nabla_A^{(\alpha)}{}_X Y\bigr)
+    =\nabla_B^{(\alpha)}{}_{\dd\Phi X}(\dd\Phi Y).
+    \label{eq:connection-naturality}
+\end{equation}
+For every piecewise $C^1$ path $\gamma$,
+\begin{equation}
+    \dd\Phi_{\gamma(1)}P_\gamma^{A,\alpha}
+    =P_{\Phi\circ\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)}.
+    \label{eq:transport-naturality}
+\end{equation}
+Curvature tensors intertwine, and holonomies of corresponding loops are conjugate.
+\end{theorem}
+
+\begin{proof}
+Since $F_A=F_B\circ\Phi$, functoriality of pullback gives
+\begin{equation}
+    \Phi^*g_B=\Phi^*F_B^*g^\Delta=(F_B\circ\Phi)^*g^\Delta=F_A^*g^\Delta=g_A,
+\end{equation}
+and identically for $C$. A Riemannian isometry preserves the Levi-Civita connection. Preservation of $g$ and $C$ implies preservation of $K$, so \eqref{eq:alpha-connection} gives \eqref{eq:connection-naturality}. Applying $\dd\Phi$ to an $A$-parallel field and using uniqueness of the linear transport ODE gives \eqref{eq:transport-naturality}. Curvature naturality follows from its definition as the commutator of covariant derivatives, and loop holonomies are consequently conjugate.
+\end{proof}
+
+\begin{corollary}[Intrinsic semantic fields]\label{cor:intrinsic-field}
+Let $S_t:P\to P$ be a smooth semantic flow with infinitesimal field
+\begin{equation}
+    Z_P(p)=\left.\frac{\dd}{\dd t}\right|_{t=0}S_t(p).
+\end{equation}
+Define model fields $X_i$ by $\dd F_i(X_i)=Z_P\circ F_i$. Then
+\begin{equation}
+    \dd\Phi(X_A)=X_B\circ\Phi.
+\end{equation}
+\end{corollary}
+
+The condition is substantive: a context operation need not descend to $P$. If two hidden states have the same prediction before an intervention but distinct predictive effects afterward, then no intrinsic field $Z_P$ exists on the predictive quotient. Section~\ref{sec:semantic-obstruction} quantifies this obstruction.
+
+\section{Prediction convergence does not imply geometric convergence}
+
+Let $P(\cdot\mid c)$ be the data conditional and $q(\cdot\mid c)$ a model. Population cross-entropy decomposes as
+\begin{equation}
+    \mathcal L(q)-H_P(Y\mid C)
+    =\E_C\KL\bigl(P(\cdot\mid C)\Vert q(\cdot\mid C)\bigr).
+    \label{eq:ce-decomposition}
+\end{equation}
+The logarithmic score is strictly proper \citep{gneitingRaftery2007}. If models $q_A,q_B$ have excess risks $\epsilon_A,\epsilon_B$, Pinsker's inequality and the triangle inequality yield
+\begin{equation}
+    \E_C\|q_A(\cdot\mid C)-q_B(\cdot\mid C)\|_1
+    \le \sqrt{2\epsilon_A}+\sqrt{2\epsilon_B}.
+    \label{eq:two-model-pinsker}
+\end{equation}
+This makes output agreement natural under realizability and global population-risk optimization. It provides no derivative control.
+
+\begin{proposition}[Regular KL-to-geometry counterexample]\label{prop:counterexample}
+There exist smooth, uniformly interior, regular Bernoulli predictive families $p_n,p_*$ on $[-1,1]$ such that
+\begin{equation}
+    \sup_x\KL(p_*(x)\Vert p_n(x))=O(n^{-2}),
+\end{equation}
+but their pullback Fisher metrics do not converge even pointwise at $x=0$.
+\end{proposition}
+
+\begin{proof}
+Let $p_*(x)=\operatorname{Ber}(r(x))$ and $p_n(x)=\operatorname{Ber}(r_n(x))$, where
+\begin{equation}
+    r(x)=\frac13+\frac{x}{20},\qquad
+    r_n(x)=r(x)+\frac{1}{100n}\sin(nx).
+\end{equation}
+All probabilities remain in a fixed compact subset of $(0,1)$. Moreover,
+\begin{equation}
+    r_n'(x)=\frac1{20}+\frac1{100}\cos(nx)\in[0.04,0.06],
+\end{equation}
+so every map is a regular immersion with a uniform rank bound. Uniform interiority and Taylor's theorem give $\sup_x\KL(p_*\Vert p_n)=O(n^{-2})$. The Bernoulli pullback metric is
+\begin{equation}
+    g(x)=\frac{r'(x)^2}{r(x)(1-r(x))}\,\dd x^2.
+\end{equation}
+At $x=0$, $r_n(0)=r(0)=1/3$, but $r_n'(0)=3/50$ and $r'(0)=1/20$. Hence
+\begin{equation}
+    g_n(0)=\frac{81}{5000}\,\dd x^2
+    \neq \frac9{800}\,\dd x^2=g_*(0).
+\end{equation}
+\end{proof}
+
+This example rules out an unconditional theorem of the form ``cross-entropy convergence implies Fisher convergence.'' The oscillations have bounded first derivative but unbounded higher regularity, anticipating the Sobolev condition in Section~\ref{sec:risk-to-transport}.
+
+There is a second nonidentifiability. For any hidden diffeomorphism $\psi$,
+\begin{equation}
+    H'=\psi\circ H,\qquad F'=F\circ\psi^{-1}
+\end{equation}
+produces exactly the same predictions while changing ambient Euclidean coordinates. Pullback Fisher geometry handles this gauge covariantly, but loss alone cannot identify a privileged hidden Euclidean metric.
+
+\section{Stability of Fisher geometry and transport}\label{sec:stability}
+
+We now quantify how derivative-level predictive agreement propagates to geometry. We state the result on a common Euclidean chart. For two latent manifolds related by a comparison diffeomorphism $\Phi$, replace the second map by $\widetilde p=F_B\circ\Phi$.
+
+Let $K\Subset U\subset\R^m$ and let $p,\widetilde p:U\to\simplex$. For an integer $k$, use the componentwise norm
+\begin{equation}
+    \|p\|_{C^k(K)}=\max_{a,|\beta|\le k}\sup_{x\in K}|\partial^\beta p_a(x)|.
+\end{equation}
+
+\begin{assumption}[Uniform regularity]\label{ass:regularity}
+For constants $\eta,\lambda,B_2>0$,
+\begin{align}
+    p_a(x),\widetilde p_a(x)&\ge\eta,\\
+    \|p\|_{C^2(K)}+\|\widetilde p\|_{C^2(K)}&\le B_2,\\
+    \lambda_{\min}(g_p(x)),\lambda_{\min}(g_{\widetilde p}(x))&\ge\lambda
+\end{align}
+for every $a$ and $x\in K$.
+\end{assumption}
+
+The probability floor excludes the singular simplex boundary. The spectral floor excludes decoder-null directions after quotienting and prevents inverse-metric instability.
+
+\begin{theorem}[$C^2$ stability of $\alpha$-transport]\label{thm:c2-stability}
+Under Assumption~\ref{ass:regularity}, fix $A>0$. There is a constant
+\begin{equation}
+    C_\Gamma=C_\Gamma(m,N,A,\eta^{-1},\lambda^{-1},B_2)
+\end{equation}
+such that, uniformly for $|\alpha|\le A$,
+\begin{equation}
+\begin{split}
+    &\|g_p-g_{\widetilde p}\|_{C^1(K)}
+    +\|C_p-C_{\widetilde p}\|_{C^0(K)}\\
+    &\hspace{3em}
+    +\|\Gamma_p^{(\alpha)}-\Gamma_{\widetilde p}^{(\alpha)}\|_{C^0(K)}
+    \le C_\Gamma\|p-\widetilde p\|_{C^2(K)}.
+\end{split}
+\label{eq:connection-stability}
+\end{equation}
+Let $\gamma:[0,1]\to K$ be piecewise $C^1$, with Euclidean length $L_\gamma$. If
+\begin{equation}
+    M_\Gamma=\max\bigl\{\|\Gamma_p^{(\alpha)}\|_{C^0},
+    \|\Gamma_{\widetilde p}^{(\alpha)}\|_{C^0}\bigr\},
+\end{equation}
+where the norm is the induced bilinear operator norm, then
+\begin{equation}
+    \|P_\gamma^{p,\alpha}-P_\gamma^{\widetilde p,\alpha}\|_{\op}
+    \le L_\gamma e^{M_\Gamma L_\gamma}C_\Gamma
+    \|p-\widetilde p\|_{C^2(K)}.
+    \label{eq:pt-stability}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Equations \eqref{eq:pullback-metric} and \eqref{eq:pullback-cubic} are finite sums of rational functions of $p$ and its first derivatives. Their denominators are controlled by $\eta$. Differentiating \eqref{eq:pullback-metric} once uses at most second derivatives, giving the first two terms of \eqref{eq:connection-stability} by the mean-value theorem on the compact regularity class.
+
+For completeness, the lower-index $\alpha$-coefficients have the direct probability-coordinate expression
+\begin{equation}
+    \Gamma^{(\alpha)}_{ij,k}
+    =\sum_a\left[
+    \frac{\partial_{ij}p_a\,\partial_kp_a}{p_a}
+    -\frac{1+\alpha}{2}
+    \frac{\partial_ip_a\,\partial_jp_a\,\partial_kp_a}{p_a^2}
+    \right].
+    \label{eq:lower-alpha}
+\end{equation}
+Thus their difference is $O(\|p-\widetilde p\|_{C^2})$. Raising the final index requires inverse metrics. The identity
+\begin{equation}
+    g_p^{-1}-g_{\widetilde p}^{-1}
+    =g_p^{-1}(g_{\widetilde p}-g_p)g_{\widetilde p}^{-1}
+\end{equation}
+and the spectral floor $\lambda$ give inverse-metric stability, proving \eqref{eq:connection-stability}.
+
+Along $\gamma$, transport solves the linear ODE
+\begin{equation}
+    \dot V(t)=-\Gamma^{(\alpha)}(\gamma(t))[\dot\gamma(t)]V(t).
+\end{equation}
+Duhamel's formula bounds the difference of the two fundamental solutions by the integral of the coefficient defect multiplied by their growth factors. Gronwall's inequality yields \eqref{eq:pt-stability}.
+\end{proof}
+
+\begin{corollary}[Cross-model transport commutator]\label{cor:cross-model-commutator}
+Let $F_A:M_A\to\simplex$, $F_B:M_B\to\simplex$, and let $\Phi:M_A\to M_B$ be a $C^2$ local diffeomorphism. Suppose $F_A$ and $F_B\circ\Phi$ satisfy Assumption~\ref{ass:regularity} and
+\begin{equation}
+    \|F_A-F_B\circ\Phi\|_{C^2(K)}\le\varepsilon.
+\end{equation}
+Then
+\begin{equation}
+\begin{split}
+    &\bigl\|\dd\Phi_{\gamma(1)}P_\gamma^{A,\alpha}
+    -P_{\Phi\circ\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)}\bigr\|_{\op}\\
+    &\hspace{5em}\le L_\gamma e^{M_\Gamma L_\gamma}C_\Gamma\varepsilon,
+\end{split}
+\label{eq:commutator-bound}
+\end{equation}
+after using the aligned tangent norms. At $\varepsilon=0$, this reduces to Theorem~\ref{thm:exact-naturality}.
+\end{corollary}
+
+\begin{proof}
+The connection induced by $F_B\circ\Phi$ is the pullback of the connection induced by $F_B$. Its transport is conjugated by $\dd\Phi$. Apply Theorem~\ref{thm:c2-stability} on $M_A$.
+\end{proof}
+
+\begin{theorem}[$C^3$ curvature stability]\label{thm:c3-curvature}
+Assume the hypotheses of Theorem~\ref{thm:c2-stability}, replace the $C^2$ bound by
+\begin{equation}
+    \|p\|_{C^3(K)}+\|\widetilde p\|_{C^3(K)}\le B_3,
+\end{equation}
+and retain the probability and spectral floors. Then
+\begin{equation}
+    \|R_p^{(\alpha)}-R_{\widetilde p}^{(\alpha)}\|_{C^0(K)}
+    \le C_R\|p-\widetilde p\|_{C^3(K)},
+\end{equation}
+where $C_R$ depends on $m,N,A,\eta^{-1},\lambda^{-1},B_3$. Levi-Civita sectional curvatures also converge on corresponding two-planes whose Gram determinants are uniformly bounded below.
+\end{theorem}
+
+\begin{proof}
+Differentiating the argument for \eqref{eq:connection-stability} gives $C^1$ control of the Christoffel symbols. Insert it into
+\begin{equation}
+    R^\ell{}_{ijk}=\partial_i\Gamma^\ell{}_{jk}-\partial_j\Gamma^\ell{}_{ik}
+    +\Gamma^\ell{}_{ir}\Gamma^r{}_{jk}-\Gamma^\ell{}_{jr}\Gamma^r{}_{ik}.
+\end{equation}
+Sectional curvature is a quotient. The same estimates control its metric numerator, while the uniform Gram bound controls its denominator.
+\end{proof}
+
+\begin{remark}[Why the assumptions matter]
+The constants diverge near $p_a=0$ because the Fisher tensors contain $p_a^{-1}$ and $p_a^{-2}$. They also diverge near rank loss because raising indices requires $g^{-1}$. These are geometric instabilities, not proof artifacts. In large-vocabulary models, a useful extension would replace a uniform tokenwise probability floor by moment or coarse-graining conditions with vocabulary-independent constants.
+\end{remark}
+
+\section{From cross-entropy to transport under Sobolev regularity}\label{sec:risk-to-transport}
+
+Theorem~\ref{thm:c2-stability} assumes derivative-level agreement. We now give sufficient conditions under which population KL convergence implies it.
+
+Let $\Omega$ be a compact $m$-dimensional smooth manifold or a bounded Sobolev-extension domain. Let $\mu$ have density $\rho$ with respect to volume, satisfying $\rho\ge\rho_0>0$. Define
+\begin{equation}
+    \mathcal K(p,\widetilde p)
+    =\int_\Omega \KL\bigl(p(x)\Vert\widetilde p(x)\bigr)\,\dd\mu(x).
+\end{equation}
+
+\begin{theorem}[Risk-to-transport convergence]\label{thm:risk-to-transport}
+Let $p,\widetilde p:\Omega\to\simplex$ satisfy the probability and spectral floors of Assumption~\ref{ass:regularity}. Suppose
+\begin{equation}
+    p,\widetilde p\in H^s(\Omega;\R^N),\qquad
+    s>2+\frac m2,
+\end{equation}
+and
+\begin{equation}
+    \|p\|_{H^s}+\|\widetilde p\|_{H^s}\le B.
+\end{equation}
+For every $r$ with
+\begin{equation}
+    2+\frac m2<r<s,
+\end{equation}
+there is a constant $C$ such that, for every bounded-length path $\gamma$,
+\begin{equation}
+    \|P_\gamma^{p,\alpha}-P_\gamma^{\widetilde p,\alpha}\|_{\op}
+    \le C B^{r/s}\mathcal K(p,\widetilde p)^{\frac{s-r}{2s}}.
+    \label{eq:risk-to-transport}
+\end{equation}
+Equivalently, the transport error is $O(\mathcal K^\beta)$ for every
+\begin{equation}
+    0<\beta<\frac{s-2-m/2}{2s}.
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Pinsker's inequality and $\rho\ge\rho_0$ give
+\begin{equation}
+\begin{split}
+    \|p-\widetilde p\|_{L^2(\dd\mathrm{vol})}^2
+    &\le\rho_0^{-1}\int_\Omega\|p-\widetilde p\|_1^2\,\dd\mu\\
+    &\le 2\rho_0^{-1}\mathcal K(p,\widetilde p).
+\end{split}
+\end{equation}
+Sobolev interpolation \citep{adamsFournier2003} yields
+\begin{equation}
+    \|p-\widetilde p\|_{H^r}
+    \le C\|p-\widetilde p\|_{L^2}^{1-r/s}
+    \|p-\widetilde p\|_{H^s}^{r/s},
+\end{equation}
+and therefore
+\begin{equation}
+    \|p-\widetilde p\|_{H^r}
+    \le C B^{r/s}\mathcal K(p,\widetilde p)^{(s-r)/(2s)}.
+\end{equation}
+Since $r>2+m/2$, Sobolev embedding gives $H^r\hookrightarrow C^2$. Apply Theorem~\ref{thm:c2-stability}.
+\end{proof}
+
+\begin{corollary}[Two-model geometric convergence]\label{cor:two-model-convergence}
+Suppose two model sequences $p_{A,n},p_{B,n}$ on a shared intervention chart converge in population cross-entropy to the same conditional map $p_*$, and all three maps satisfy uniform versions of the hypotheses of Theorem~\ref{thm:risk-to-transport}. Then, for every admissible $\beta$,
+\begin{equation}
+    \|P_\gamma^{A,n,\alpha}-P_\gamma^{B,n,\alpha}\|_{\op}
+    \le C\bigl(\epsilon_{A,n}^{\beta}+\epsilon_{B,n}^{\beta}\bigr),
+\end{equation}
+where $\epsilon_{i,n}=\E\KL(p_*\Vert p_{i,n})$. With a cross-model alignment $\Phi_n$, the same statement holds for the transport commutator in \eqref{eq:commutator-bound} after replacing $p_{B,n}$ by $p_{B,n}\circ\Phi_n$.
+\end{corollary}
+
+If $s>3+m/2$, the same argument combined with Theorem~\ref{thm:c3-curvature} gives curvature convergence for every
+\begin{equation}
+    0<\beta<\frac{s-3-m/2}{2s}.
+\end{equation}
+
+The uniform Sobolev hypothesis is strong but transparent. It rules out the high-frequency behavior in Proposition~\ref{prop:counterexample}. For language models it should be tested on low-dimensional continuous intervention charts, such as soft-prompt paths or controlled activation subspaces, rather than assumed on the discrete set of tokenized contexts.
+
+\section{The semantic-sufficiency obstruction}\label{sec:semantic-obstruction}
+
+Even perfect agreement of predictive geometry does not guarantee that a semantic operation is a field on that geometry. We now separate this representational obstruction from connection mismatch.
+
+Let $F:\mathcal H\to P$ be a regular predictive quotient, let $H$ be a random hidden state with law $\mu$, and let $X_T(H)\in T_H\mathcal H$ describe a semantic operation $T$. Its observable infinitesimal predictive effect is
+\begin{equation}
+    Z_T(H)=\dd F_H X_T(H)\in T_{F(H)}P.
+\end{equation}
+Assume square integrability in the Fisher metric. Since $P$ is embedded in the simplex, tangent-valued conditional expectations may be taken fiberwise in the ambient zero-sum space; conditioning on $F(H)=p$ fixes both $T_pP$ and $g_p$.
+
+\begin{theorem}[Semantic conditional-variance obstruction]\label{thm:semantic-obstruction}
+For a measurable, square-integrable field $Y:P\to TP$, define
+\begin{equation}
+    \mathcal E_T(Y)=\E\|Z_T(H)-Y(F(H))\|_{g_{F(H)}}^2.
+\end{equation}
+Let
+\begin{equation}
+    \overline Z_T(p)=\E[Z_T(H)\mid F(H)=p].
+\end{equation}
+Then
+\begin{equation}
+\begin{split}
+    \mathcal E_T(Y)
+    ={}&\E\|Z_T-\overline Z_T(F(H))\|_g^2\\
+    &+\E\|\overline Z_T(F(H))-Y(F(H))\|_g^2.
+\end{split}
+\label{eq:semantic-pythagoras}
+\end{equation}
+Consequently,
+\begin{equation}
+    \inf_Y\mathcal E_T(Y)
+    =\E\Var_g(Z_T\mid F).
+    \label{eq:descent-obstruction}
+\end{equation}
+The semantic effect descends almost surely to a predictive field if and only if this conditional variance is zero. Smooth descent additionally requires a smooth version of $\overline Z_T$.
+\end{theorem}
+
+\begin{proof}
+Square-integrable tangent-valued random variables form a Hilbert direct integral with inner product
+\begin{equation}
+    \langle U,V\rangle=\E[g_{F(H)}(U,V)].
+\end{equation}
+The fields measurable with respect to $\sigma(F)$ form a closed subspace. Conditional expectation is the orthogonal projection onto that subspace. Equivalently, decompose
+\begin{equation}
+\begin{split}
+    Z_T-Y(F)
+    ={}&\bigl(Z_T-\overline Z_T(F)\bigr)\\
+    &+\bigl(\overline Z_T(F)-Y(F)\bigr).
+\end{split}
+\end{equation}
+The two terms are orthogonal after conditioning on $F$, which proves \eqref{eq:semantic-pythagoras} and \eqref{eq:descent-obstruction}.
+\end{proof}
+
+\begin{corollary}[Connection-restricted decomposition]\label{cor:connection-decomposition}
+Let $\mathcal C_\alpha$ be any closed class of predictive fields selected by an $\alpha$-connection, for example fields satisfying $\nabla^{(\alpha)}Y=0$ on a specified simply connected chart or fields with a bounded covariant-derivative residual. Then
+\begin{equation}
+\begin{split}
+    \inf_{Y\in\mathcal C_\alpha}\mathcal E_T(Y)
+    ={}&\underbrace{\E\Var_g(Z_T\mid F)}_{\text{predictive insufficiency}}\\
+    &+\underbrace{\inf_{Y\in\mathcal C_\alpha}
+    \E\|\overline Z_T-Y\|_g^2}_{\text{connection mismatch}}.
+\end{split}
+\label{eq:connection-decomposition}
+\end{equation}
+\end{corollary}
+
+\begin{corollary}[Cross-model semantic transfer]\label{cor:cross-model-semantic}
+Let $P_A,P_B$ be predictive quotients related by a Fisher isometry $\Phi:P_A\to P_B$ on paired samples. Write $Q_i=F_i(H_i)$ for the random predictive state of model $i$. Define
+\begin{equation}
+    Y_{A\to B}(p_B)=\dd\Phi_{\Phi^{-1}(p_B)}
+    \overline Z_A(\Phi^{-1}(p_B)).
+\end{equation}
+Then
+\begin{equation}
+\begin{split}
+    \E\|Z_B-Y_{A\to B}(Q_B)\|_{g_B}^2
+    ={}&\underbrace{\E\|Z_B-\overline Z_B(Q_B)\|_{g_B}^2}_{\text{model-B quotient obstruction}}\\
+    &+\underbrace{\E\|\overline Z_B-\dd\Phi\,\overline Z_A\|_{g_B}^2}_{\text{cross-model field mismatch}}.
+\end{split}
+\label{eq:cross-model-field-decomposition}
+\end{equation}
+\end{corollary}
+
+No choice of $\alpha$ can reduce the first term of \eqref{eq:connection-decomposition}. Therefore a large conditional variance falsifies the claim that the next-token predictive manifold is a sufficient semantic state for $T$ before exponential, Levi-Civita, mixture, or learned-$\alpha$ transport is compared.
+
+\section{Operational tests and training implications}
+
+The theorems suggest a hierarchy of increasingly strong cross-model agreement tests:
+\begin{equation}
+\begin{array}{ccl}
+\text{Level 0} &:& \text{output KL agreement},\\
+\text{Level 1} &:& \text{Fisher metric agreement},\\
+\text{Level 2} &:& \alpha\text{-connection and transport agreement},\\
+\text{Level 3} &:& \text{semantic-field equivariance},\\
+\text{Level 4} &:& \text{curvature and holonomy agreement}.
+\end{array}
+\end{equation}
+Agreement at one level does not imply the next without the regularity and sufficiency conditions identified above.
+
+\subsection{Transport commutation score}
+
+For an estimated alignment $\Phi$ and sampled paths and tangent vectors, define
+\begin{equation}
+    \mathcal D_{\mathrm{PT}}^{(\alpha)}(A,B;\Phi)
+    =\E_{\gamma,v}
+    \frac{\|\dd\Phi_{\gamma(1)} P_\gamma^{A,\alpha}v
+    -P_{\Phi\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)} v\|}{\|v\|}.
+    \label{eq:pt-score}
+\end{equation}
+Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive equivalence, while Corollary~\ref{cor:cross-model-commutator} bounds it under approximate equivalence. A practical study should test whether \eqref{eq:pt-score} predicts held-out steering transfer or task generalization beyond output KL and representation-only similarities such as CKA.
+
+\subsection{Selecting the connection}
+
+At a linear softmax head, $\alpha=1$ is ordinary vector reuse, $\alpha=0$ is Fisher-metric-compatible Levi-Civita transport, and $\alpha=-1$ is mixture transport. A semantic field $X_T$ can be evaluated through
+\begin{equation}
+    \mathcal R_T(\alpha)=\E\|\nabla^{(\alpha)}X_T\|_g^2.
+\end{equation}
+The correct interpretation is comparative:
+\begin{itemize}[leftmargin=*]
+    \item exponential transport winning supports context-independent natural-coordinate vectors for the tested operation;
+    \item Levi-Civita winning supports preservation of predictive Fisher geometry;
+    \item mixture or an intermediate $\alpha$ winning supports probabilistic affine structure without privileging metric compatibility;
+    \item every connection failing, together with a large conditional variance in \eqref{eq:descent-obstruction}, falsifies sufficiency of the predictive quotient;
+    \item every connection failing with small conditional variance motivates a richer, operation-specific connection or nonparallel field model.
+\end{itemize}
+
+\subsection{Training regimes}
+
+The risk-to-transport theorem indicates why derivative regularity matters. A causal training study can compare cross-entropy-only models with matched-loss models trained using
+\begin{equation}
+    \mathcal L_{\mathrm{total}}
+    =\mathcal L_{\mathrm{CE}}
+    +\lambda\widehat{\Var}_g(\dd F X_T\mid F)
+    +\mu\|\nabla^{(\alpha)}\overline Z_T\|_g^2
+    +\nu\mathcal R_{\mathrm{smooth}}.
+    \label{eq:training-objective}
+\end{equation}
+The first regularizer encourages the operation to descend to the predictive quotient. The second selects connection-relative consistency. The final term controls the derivative oscillations excluded by Theorem~\ref{thm:risk-to-transport}. Behavioral improvement, rather than a smaller geometric regularizer alone, must be the primary outcome.
+
+A no-GPU pilot can use frozen small models and one- or two-dimensional soft-prompt charts. Finite differences estimate $F$, $\partial F$, and $\partial^2F$; the model's output head provides exact vocabulary probabilities. The main comparisons are output KL, metric defect, the transport score \eqref{eq:pt-score}, semantic conditional variance, and held-out intervention transfer.
+
+\section{Limitations}
+
+\paragraph{Continuous charts.}
+Tokenized contexts are discrete. Derivatives and connections require an explicit continuous chart, such as soft prompts, activation interventions, or a justified local manifold model.
+
+\paragraph{Boundary and rank.}
+Softmax probabilities are positive but can be extremely small. Uniform tokenwise floors are mathematically clean and practically strong. The Fisher metric can also be severely ill-conditioned. Quotienting, regularization, coarse-graining, or horizontal-subspace analysis is necessary near rank loss.
+
+\paragraph{Different tokenizers.}
+The exact theorem assumes a common outcome space. A tokenizer map generally acts as a Markov morphism. Fisher geometry is preserved only under a statistically sufficient or reversible identification; otherwise it contracts \citep{ayJostLeSchwachhofer2015}.
+
+\paragraph{Population versus empirical loss.}
+Equation \eqref{eq:ce-decomposition} concerns population risk, realizability, and global optimization. Finite empirical loss introduces estimation and optimization errors not treated here.
+
+\paragraph{Alignment is not identified automatically.}
+The stability theorem evaluates a proposed $\Phi$. Constructing a statistically identifiable alignment from finite observations, especially across different latent dimensions, is a separate problem. One may instead work on a shared low-dimensional intervention chart.
+
+\paragraph{No universal superiority claim.}
+Parallel transport compares tangent vectors at different points once a connection is selected. It does not make ambient vector addition invalid. At the final affine softmax head, addition is exactly exponential-affine transport. The preferred connection can depend on the operation, layer, and task.
+
+\section{Conclusion}
+
+Idealized pretraining makes convergence of conditional output distributions natural because excess cross-entropy is expected KL divergence. It does not by itself make convergence of Fisher metrics, affine connections, or curvature natural. Geometry depends on derivatives, and a regular oscillatory counterexample separates these notions.
+
+Under explicit smoothness and identifiability assumptions, the stronger conclusion becomes provable. Predictive maps that converge in $C^2$ have convergent Amari $\alpha$-connections and parallel transports; $C^3$ convergence controls curvature. Integrated KL plus a uniform Sobolev bound supplies the missing derivative convergence and yields a quantitative loss-to-transport theorem. The semantic conditional-variance obstruction then determines whether the predictive quotient is rich enough to support the operation at all.
+
+The resulting research hypothesis is precise and falsifiable: independently trained models that estimate the same smooth predictive system should, after quotienting and alignment, exhibit small $\alpha$-transport commutators and equivariant semantic fields. Failure can be localized to inadequate regularity, predictive insufficiency, field mismatch, or connection mismatch. This is a stronger and more useful claim than saying that latent spaces are ``really'' probabilistic rather than linear.
+
+\section*{Code and manuscript availability}
+
+The manuscript source, model-free predictive-geometry implementation, CPU tests, and experimental protocols are available at
+\begin{center}
+    \url{https://github.com/guybass/probalistic-latent-spaces}.
+\end{center}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}

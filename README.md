@@ -8,6 +8,12 @@ The current answer is:
 
 The research task is to determine which tradeoff actual semantic composition follows.
 
+## Theory paper
+
+The arXiv-style manuscript is in [`paper/main.tex`](paper/main.tex), with a verified PDF at [`output/pdf/predictive_geometric_agreement.pdf`](output/pdf/predictive_geometric_agreement.pdf).
+
+Its central result is a quantitative stability ladder from predictive-map agreement to Fisher metric, Amari alpha-connection, parallel-transport, and curvature agreement. It also proves that cross-entropy convergence alone is insufficient, gives a loss-to-transport theorem under Sobolev regularity, and separates predictive semantic insufficiency from connection mismatch through a conditional-variance decomposition.
+
 A key audit result is that “final-layer flatness” depends on the metric. Pulling back
 Euclidean distance between centered logits gives a constant flat metric, while pulling
 back local KL/cross-entropy gives the probability-dependent Fisher metric studied here.
