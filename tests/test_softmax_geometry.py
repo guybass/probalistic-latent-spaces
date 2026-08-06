@@ -66,6 +66,7 @@ class SoftmaxGeometryTests(unittest.TestCase):
             self.v,
         )
         self.assertAlmostEqual(result.sectional_curvature, 0.25, places=12)
+        self.assertGreaterEqual(result.normalized_gram_determinant, 1e-4)
         self.assertLess(result.solve_relative_residual, 1e-14)
 
     def test_near_boundary_saturated_family_still_has_curvature_one_quarter(self) -> None:
@@ -190,6 +191,176 @@ class SoftmaxGeometryTests(unittest.TestCase):
             0.25,
             places=12,
         )
+
+    def test_same_plane_fisher_orthonormalization_preserves_curvature(self) -> None:
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        original = geometry.sectional_curvature(self.u, self.v)
+        u_normalized, v_normalized = geometry.fisher_orthonormalize_plane(
+            self.u,
+            self.v,
+        )
+        normalized = geometry.sectional_curvature(u_normalized, v_normalized)
+        self.assertAlmostEqual(
+            original.sectional_curvature,
+            normalized.sectional_curvature,
+            places=12,
+        )
+        self.assertAlmostEqual(normalized.normalized_gram_determinant, 1.0, places=12)
+
+    def test_vocabulary_chunking_reproduces_full_curvature(self) -> None:
+        rng = np.random.default_rng(2048)
+        weights = rng.normal(size=(37, 4))
+        probabilities = rng.dirichlet(np.linspace(0.7, 2.1, 37))
+        u = rng.normal(size=4)
+        v = rng.normal(size=4)
+        geometry = SoftmaxHessianGeometry(weights, probabilities)
+        full = geometry.sectional_curvature(u, v)
+        for chunk_size in (1, 5, 16, 64):
+            with self.subTest(chunk_size=chunk_size):
+                chunked = geometry.sectional_curvature_chunked(
+                    u,
+                    v,
+                    chunk_size=chunk_size,
+                )
+                self.assertAlmostEqual(
+                    chunked.sectional_curvature,
+                    full.sectional_curvature,
+                    places=11,
+                )
+                np.testing.assert_allclose(
+                    (
+                        chunked.metric_min_eigenvalue,
+                        chunked.metric_max_eigenvalue,
+                    ),
+                    (
+                        full.metric_min_eigenvalue,
+                        full.metric_max_eigenvalue,
+                    ),
+                    rtol=2e-13,
+                    atol=2e-14,
+                )
+
+    def test_vocabulary_chunking_rejects_invalid_chunk_size(self) -> None:
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        for chunk_size in (0, -1, 1.5):
+            with self.subTest(chunk_size=chunk_size):
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    geometry.sectional_curvature_chunked(
+                        self.u,
+                        self.v,
+                        chunk_size=chunk_size,  # type: ignore[arg-type]
+                    )
+
+    def test_spectrum_matched_control_preserves_eigen_leverage(self) -> None:
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        source_u, source_v = geometry.fisher_orthonormalize_plane(
+            self.u,
+            self.v,
+        )
+        control_u, control_v = geometry.spectrum_matched_control_plane(
+            self.u,
+            self.v,
+            np.random.default_rng(91),
+        )
+        source = np.column_stack((source_u, source_v))
+        control = np.column_stack((control_u, control_v))
+        source_whitened = (
+            np.sqrt(geometry.eigenvalues)[:, None]
+            * (geometry.eigenvectors.T @ source)
+        )
+        control_whitened = (
+            np.sqrt(geometry.eigenvalues)[:, None]
+            * (geometry.eigenvectors.T @ control)
+        )
+        for source_row, control_row in zip(source_whitened, control_whitened):
+            np.testing.assert_allclose(
+                np.outer(source_row, source_row),
+                np.outer(control_row, control_row),
+                atol=1e-12,
+            )
+        np.testing.assert_allclose(
+            control.T @ geometry.metric @ control,
+            np.eye(2),
+            atol=1e-12,
+        )
+
+    def test_repeated_eigenspace_uses_basis_invariant_haar_block(self) -> None:
+        scale = np.sqrt(3.0)
+        weights = np.vstack(
+            [
+                scale * np.eye(3),
+                -scale * np.eye(3),
+            ]
+        )
+        probabilities = np.full(6, 1.0 / 6.0)
+        geometry = SoftmaxHessianGeometry(weights, probabilities)
+        np.testing.assert_allclose(geometry.metric, np.eye(3), atol=2e-15)
+        self.assertEqual(
+            geometry.eigenvalue_bands(eigenspace_rtol=1e-12),
+            ((0, 3),),
+        )
+        source_u = np.array([1.0, 0.0, 0.0])
+        source_v = np.array([0.0, 1.0, 0.0])
+        control_u, control_v = geometry.spectrum_matched_control_plane(
+            source_u,
+            source_v,
+            np.random.default_rng(41),
+            eigenspace_rtol=1e-12,
+        )
+        control = np.column_stack((control_u, control_v))
+        np.testing.assert_allclose(
+            control.T @ geometry.metric @ control,
+            np.eye(2),
+            atol=1e-12,
+        )
+        self.assertFalse(
+            np.allclose(np.abs(control), np.column_stack((source_u, source_v)))
+        )
+
+    def test_nonfinite_numerical_thresholds_are_rejected(self) -> None:
+        for keyword in (
+            "eigenvalue_rtol",
+            "plane_gram_rtol",
+            "solve_residual_rtol",
+            "solve_forward_error_rtol",
+        ):
+            with self.subTest(keyword=keyword):
+                with self.assertRaises(ValueError):
+                    SoftmaxHessianGeometry(
+                        self.weights,
+                        self.p,
+                        **{keyword: float("nan")},
+                    )
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        with self.assertRaisesRegex(ValueError, "eigenspace_rtol"):
+            geometry.spectrum_matched_control_plane(
+                self.u,
+                self.v,
+                np.random.default_rng(0),
+                eigenspace_rtol=float("nan"),
+            )
+
+    def test_plane_gate_is_distinct_from_metric_rank_gate(self) -> None:
+        geometry = SoftmaxHessianGeometry(
+            self.weights,
+            self.p,
+            eigenvalue_rtol=1e-14,
+            plane_gram_rtol=1e-4,
+        )
+        nearly_collinear = self.u + 1e-3 * self.v
+        with self.assertRaisesRegex(ValueError, "normalized Fisher-Gram gate"):
+            geometry.sectional_curvature(self.u, nearly_collinear)
+
+    def test_linear_solve_residual_gate_is_enforced(self) -> None:
+        geometry = SoftmaxHessianGeometry(
+            self.weights,
+            self.p,
+            solve_residual_rtol=1e-30,
+        )
+        with self.assertRaisesRegex(ValueError, "relative-residual gate"):
+            geometry.sectional_curvature(self.u, self.v)
+        with self.assertRaisesRegex(ValueError, "relative-residual gate"):
+            geometry.cubic_operator(self.u)
 
 
 if __name__ == "__main__":

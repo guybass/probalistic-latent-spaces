@@ -1,5 +1,7 @@
 # Predictive Fisher Geometry: Audited Claims, Proofs, and Novelty Boundary
 
+> **Historical proof memorandum (superseded where inconsistent).** The publication-level theorem package is [paper/main.tex](paper/main.tex). See [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md) for corrections concerning intrinsic versus ambient curvature, curvature nullity, LayerNorm support, canonical citations, and the scope of connection-relative linearity.
+
 Date of literature audit: 2026-08-04
 Status: working research memorandum, not a publication claim
 

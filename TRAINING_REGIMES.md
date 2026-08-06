@@ -1,5 +1,7 @@
 # Training regimes for connection-relative representations
 
+> **Prospective protocol, not an empirical result.** Apply conditional-variance regularization only to a verified noninjective predictive map. For a declared coarsening \(\bar F=S\circ F\), replace the effect and metric as well by \(d\bar F\,X\) and the coarsened-image geometry; conditioning the original tangent field on coarse labels is not the theorem. At an injective final affine head the original obstruction is identically zero. First-order alpha residuals require length-to-zero or integrated-transport validation; see [paper/main.tex](paper/main.tex) and [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md).
+
 **Status:** proposed causal experiments; not yet implemented
 **Constraint:** CPU-first, matched-compute comparisons
 
@@ -22,21 +24,23 @@ not “lower geometric loss” by itself.
 
 ## 2. Core geometric loss
 
-For a semantic operation $T$, take two base contexts $c_i,c_j$ and their transformed forms. At the state entering the affine LM head, define
+For a declared smooth semantic intervention $T_t$ with $T_0$ the identity, take two base contexts $c_i,c_j$. At the state entering the affine LM head, define the primary infinitesimal fields
 
 \[
 h_i=h(c_i),
 \qquad
-X_i=h(Tc_i)-h(c_i),
+X_i=\left.\frac{d}{dt}\right|_{t=0}h(T_t c_i),
 \]
 
 \[
 h_j=h(c_j),
 \qquad
-X_j=h(Tc_j)-h(c_j),
+X_j=\left.\frac{d}{dt}\right|_{t=0}h(T_t c_j),
 \qquad
 a_{ij}=h_j-h_i.
 \]
+
+If only paired finite contexts are available, one may substitute $h(Tc)-h(c)$. At an affine head this is an exponential-coordinate logarithm, so the resulting loss tests transfer of the conventional activation-vector intervention rather than a connection-neutral definition of the semantic effect. Finite endpoint comparisons should otherwise use each candidate connection's own log--transport--exp construction.
 
 At $h_i$, let
 

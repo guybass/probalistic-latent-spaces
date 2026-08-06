@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -80,12 +81,33 @@ def extract(
     )
 
 
+def stable_control_seed(base_seed: int, revision: str, design_name: str) -> int:
+    """Derive an order-independent control seed for one checkpoint and design."""
+
+    key = f"{base_seed}\0{revision}\0{design_name}".encode("utf-8")
+    digest = hashlib.blake2b(
+        key,
+        digest_size=8,
+        person=b"predgeom",
+    ).digest()
+    return int.from_bytes(digest, byteorder="little", signed=False)
+
+
 def run_checkpoint(
     model_name: str,
     revision: str,
     cache_dir: Path,
     random_planes: int,
     seed: int,
+    control_mode: str,
+    metric_eigenvalue_rtol: float,
+    plane_gram_rtol: float,
+    solve_residual_rtol: float,
+    solve_forward_error_rtol: float,
+    same_plane_curvature_rtol: float,
+    vocabulary_chunk_size: int,
+    chunking_curvature_rtol: float,
+    eigenspace_rtol: float,
 ) -> dict[str, Any]:
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
@@ -102,10 +124,11 @@ def run_checkpoint(
     unembedding = (
         model.get_output_embeddings().weight.detach().cpu().double().numpy()
     )
-    rng = np.random.default_rng(seed)
     checkpoint_results: list[dict[str, Any]] = []
 
     for design in FACTORIALS:
+        control_seed = stable_control_seed(seed, revision, design["name"])
+        rng = np.random.default_rng(control_seed)
         extracted = {
             corner: extract(model, tokenizer, design[corner])
             for corner in ("p00", "p10", "p01", "p11")
@@ -119,33 +142,159 @@ def run_checkpoint(
 
         geometry: SoftmaxHessianGeometry | None = None
         try:
-            geometry = SoftmaxHessianGeometry(unembedding, p00)
+            geometry = SoftmaxHessianGeometry(
+                unembedding,
+                p00,
+                eigenvalue_rtol=metric_eigenvalue_rtol,
+                plane_gram_rtol=plane_gram_rtol,
+                solve_residual_rtol=solve_residual_rtol,
+                solve_forward_error_rtol=solve_forward_error_rtol,
+            )
             semantic = geometry.sectional_curvature(
                 direction_a,
                 direction_b,
             )
-            random_curvatures = []
+            orthonormal_u, orthonormal_v = geometry.fisher_orthonormalize_plane(
+                direction_a,
+                direction_b,
+            )
+            orthonormal_semantic = geometry.sectional_curvature(
+                orthonormal_u,
+                orthonormal_v,
+            )
+            same_plane_error = abs(
+                semantic.sectional_curvature
+                - orthonormal_semantic.sectional_curvature
+            )
+            same_plane_scale = max(abs(semantic.sectional_curvature), 1.0)
+            if same_plane_error > same_plane_curvature_rtol * same_plane_scale:
+                raise ValueError(
+                    "sectional curvature changed after same-plane "
+                    "Fisher orthonormalization: "
+                    f"{same_plane_error:.3e} > "
+                    f"{same_plane_curvature_rtol * same_plane_scale:.3e}"
+                )
+            chunked_semantic = geometry.sectional_curvature_chunked(
+                direction_a,
+                direction_b,
+                chunk_size=vocabulary_chunk_size,
+            )
+            chunking_error = abs(
+                semantic.sectional_curvature
+                - chunked_semantic.sectional_curvature
+            )
+            chunking_scale = max(
+                abs(semantic.sectional_curvature),
+                abs(chunked_semantic.sectional_curvature),
+                1.0,
+            )
+            if chunking_error > chunking_curvature_rtol * chunking_scale:
+                raise ValueError(
+                    "full and vocabulary-chunked curvature disagree: "
+                    f"{chunking_error:.3e} > "
+                    f"{chunking_curvature_rtol * chunking_scale:.3e}"
+                )
+            control_curvatures = []
             for _ in range(random_planes):
-                random_u, random_v = geometry.random_fisher_orthonormal_plane(rng)
-                random_curvatures.append(
+                if control_mode == "spectrum-block":
+                    random_u, random_v = geometry.spectrum_matched_control_plane(
+                        direction_a,
+                        direction_b,
+                        rng,
+                        eigenspace_rtol=eigenspace_rtol,
+                    )
+                else:
+                    random_u, random_v = geometry.random_fisher_orthonormal_plane(
+                        rng
+                    )
+                control_curvatures.append(
                     geometry.sectional_curvature(
                         random_u,
                         random_v,
                     ).sectional_curvature
                 )
+            greater_count = sum(
+                value >= semantic.sectional_curvature
+                for value in control_curvatures
+            )
+            less_count = sum(
+                value <= semantic.sectional_curvature
+                for value in control_curvatures
+            )
+            if control_curvatures:
+                greater_tail_rank = (greater_count + 1) / (
+                    len(control_curvatures) + 1
+                )
+                less_tail_rank = (less_count + 1) / (
+                    len(control_curvatures) + 1
+                )
+                two_sided_tail_rank = min(
+                    1.0,
+                    2.0 * min(greater_tail_rank, less_tail_rank),
+                )
+            else:
+                greater_tail_rank = None
+                less_tail_rank = None
+                two_sided_tail_rank = None
             curvature: dict[str, Any] = {
                 "feasible": True,
                 "semantic_sectional_curvature": semantic.sectional_curvature,
                 "semantic_plane_gram_determinant": semantic.gram_determinant,
+                "semantic_plane_normalized_gram_determinant": (
+                    semantic.normalized_gram_determinant
+                ),
                 "metric_condition_number": semantic.metric_condition_number,
                 "metric_min_eigenvalue": semantic.metric_min_eigenvalue,
                 "metric_max_eigenvalue": semantic.metric_max_eigenvalue,
                 "solve_relative_residual": semantic.solve_relative_residual,
-                "random_plane_curvatures": random_curvatures,
-                "random_plane_mean": (
-                    float(np.mean(random_curvatures))
-                    if random_curvatures
+                "solve_condition_weighted_residual": (
+                    semantic.solve_condition_weighted_residual
+                ),
+                "same_plane_orthonormalization_abs_error": same_plane_error,
+                "same_plane_orthonormalization_scaled_error": (
+                    same_plane_error / same_plane_scale
+                ),
+                "vocabulary_chunk_size": vocabulary_chunk_size,
+                "chunked_sectional_curvature": (
+                    chunked_semantic.sectional_curvature
+                ),
+                "chunking_curvature_abs_error": chunking_error,
+                "chunking_curvature_scaled_error": (
+                    chunking_error / chunking_scale
+                ),
+                "control_mode": control_mode,
+                "control_seed": control_seed,
+                "eigenspace_rtol": (
+                    eigenspace_rtol
+                    if control_mode == "spectrum-block"
                     else None
+                ),
+                "eigenspace_band_sizes": (
+                    [
+                        stop - start
+                        for start, stop in geometry.eigenvalue_bands(
+                            eigenspace_rtol=eigenspace_rtol
+                        )
+                    ]
+                    if control_mode == "spectrum-block"
+                    else None
+                ),
+                "control_plane_curvatures": control_curvatures,
+                "control_plane_mean": (
+                    float(np.mean(control_curvatures))
+                    if control_curvatures
+                    else None
+                ),
+                "control_tail_rank_greater": greater_tail_rank,
+                "control_tail_rank_less": less_tail_rank,
+                "control_tail_rank_two_sided": two_sided_tail_rank,
+                "tail_rank_calibration_condition": (
+                    "calibrated as a randomization p-value only if the "
+                    "semantic-plane statistic is conditionally invariant under "
+                    "the declared block-orthogonal control group"
+                    if control_mode == "spectrum-block"
+                    else "calibrated as a p-value only under the declared null "
+                    "that the semantic plane is Fisher-Haar distributed"
                 ),
             }
         except ValueError as error:
@@ -177,7 +326,16 @@ def run_checkpoint(
         "hidden_dim": int(unembedding.shape[1]),
         "vocabulary_size": int(unembedding.shape[0]),
         "random_seed": seed,
-        "random_planes_per_context": random_planes,
+        "control_planes_per_context": random_planes,
+        "control_mode": control_mode,
+        "metric_eigenvalue_rtol": metric_eigenvalue_rtol,
+        "plane_gram_rtol": plane_gram_rtol,
+        "solve_residual_rtol": solve_residual_rtol,
+        "solve_forward_error_rtol": solve_forward_error_rtol,
+        "same_plane_curvature_rtol": same_plane_curvature_rtol,
+        "vocabulary_chunk_size": vocabulary_chunk_size,
+        "chunking_curvature_rtol": chunking_curvature_rtol,
+        "eigenspace_rtol": eigenspace_rtol,
         "results": checkpoint_results,
     }
     del model, tokenizer, unembedding
@@ -194,6 +352,19 @@ def parse_args() -> argparse.Namespace:
         default=["step0", "step143000"],
     )
     parser.add_argument("--random-planes", type=int, default=4)
+    parser.add_argument(
+        "--control-mode",
+        choices=("spectrum-block", "fisher-haar"),
+        default="spectrum-block",
+    )
+    parser.add_argument("--metric-eigenvalue-rtol", type=float, default=1e-12)
+    parser.add_argument("--plane-gram-rtol", type=float, default=1e-4)
+    parser.add_argument("--solve-residual-rtol", type=float, default=1e-10)
+    parser.add_argument("--solve-forward-error-rtol", type=float, default=1e-4)
+    parser.add_argument("--same-plane-curvature-rtol", type=float, default=1e-10)
+    parser.add_argument("--vocabulary-chunk-size", type=int, default=4096)
+    parser.add_argument("--chunking-curvature-rtol", type=float, default=1e-7)
+    parser.add_argument("--eigenspace-rtol", type=float, default=1e-6)
     parser.add_argument("--seed", type=int, default=20260804)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--quiet", action="store_true")
@@ -214,10 +385,32 @@ def main() -> None:
     args = parse_args()
     if args.random_planes < 0:
         raise ValueError("--random-planes cannot be negative")
+    if args.vocabulary_chunk_size <= 0:
+        raise ValueError("--vocabulary-chunk-size must be positive")
+    positive_tolerances = {
+        "--metric-eigenvalue-rtol": args.metric_eigenvalue_rtol,
+        "--plane-gram-rtol": args.plane_gram_rtol,
+        "--solve-residual-rtol": args.solve_residual_rtol,
+        "--solve-forward-error-rtol": args.solve_forward_error_rtol,
+        "--same-plane-curvature-rtol": args.same_plane_curvature_rtol,
+        "--chunking-curvature-rtol": args.chunking_curvature_rtol,
+    }
+    for name, value in positive_tolerances.items():
+        if not np.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{name} must be finite and positive")
+    if (
+        not np.isfinite(args.eigenspace_rtol)
+        or args.eigenspace_rtol < 0.0
+        or args.eigenspace_rtol >= 1.0
+    ):
+        raise ValueError("--eigenspace-rtol must be finite and in [0, 1)")
     torch.set_num_threads(args.threads)
     args.cache_dir.mkdir(parents=True, exist_ok=True)
     payload = {
-        "experiment": "exact final-decoder Fisher curvature and connection transfer",
+        "experiment": (
+            "secondary finite-chord final-decoder Fisher curvature "
+            "and connection diagnostic"
+        ),
         "device": "cpu",
         "checkpoints": [
             run_checkpoint(
@@ -225,9 +418,18 @@ def main() -> None:
                 revision,
                 args.cache_dir,
                 args.random_planes,
-                args.seed + index,
+                args.seed,
+                args.control_mode,
+                args.metric_eigenvalue_rtol,
+                args.plane_gram_rtol,
+                args.solve_residual_rtol,
+                args.solve_forward_error_rtol,
+                args.same_plane_curvature_rtol,
+                args.vocabulary_chunk_size,
+                args.chunking_curvature_rtol,
+                args.eigenspace_rtol,
             )
-            for index, revision in enumerate(args.revisions)
+            for revision in args.revisions
         ],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

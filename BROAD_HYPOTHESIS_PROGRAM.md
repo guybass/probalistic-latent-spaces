@@ -1,5 +1,7 @@
 # From the MSc test back to the broad hypothesis
 
+> **Historical development note (superseded where inconsistent).** The authoritative formal statements are in [paper/main.tex](paper/main.tex), the current design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and all audit dispositions are recorded in [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). In particular, finite hidden differences privilege the exponential chart, ambient decoded curvature is not intrinsic semantic-surface curvature, and unrestricted learned connections are locally vacuous.
+
 **Date:** 5 August 2026
 **Purpose:** explain precisely how the connection-selection experiment supports, falsifies, or leaves unresolved the original hypothesis
 

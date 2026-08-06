@@ -1,5 +1,7 @@
 # Project overview
 
+> **Current status (6 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion.
+
 ## The 30-second version
 
 For a fixed context, a deterministic language model produces a hidden coordinate
@@ -150,7 +152,7 @@ The initial hypothesis was that latent spaces are probabilistic manifolds rather
 The useful core was right, but the literal statement was not:
 
 - hidden states really are vectors;
-- every finite final hidden state maps through a linear softmax head to a valid distribution;
+- every finite ambient head coordinate maps through a linear softmax head to a valid distribution, although natural post-LayerNorm states occupy a constrained subset of that ambient family;
 - constant-vector reuse is already parallel transport under the exponential connection;
 - a global isometric embedding can still be intrinsically curved.
 
@@ -158,11 +160,13 @@ The corrected hypothesis is:
 
 > A global context-independent vector may fail to be the correct **semantic invariant**, even though vector addition is mathematically valid. Semantic transformations should be modeled as local vector fields and tested for covariant constancy under competing connections.
 
-For a semantic operation $T$, write
+For a declared smooth semantic intervention $T_t$ with $T_0$ the identity, the connection-neutral infinitesimal field is
 
 \[
-X_T(h)=h(Tc)-h(c).
+X_T(h(c))=\left.\frac{d}{dt}\right|_{t=0}h(T_t c).
 \]
+
+The finite chord $h(Tc)-h(c)$ is instead the exponential-coordinate logarithm at an affine softmax head. It is a valid estimand for conventional activation-vector reuse, but comparing its transport does not make the field construction connection neutral.
 
 The operation is connection-linear when
 
@@ -170,7 +174,7 @@ The operation is connection-linear when
 \nabla X_T\approx0.
 \]
 
-This is called **connection-relative linearity**.
+Within a connection family fixed independently of the data and tested out of sample, this is called **connection-relative linearity**. An unrestricted fitted connection would be vacuous because a local connection can always be chosen to parallelize one nonvanishing field.
 
 ## What is proved, observed, and still open
 
@@ -196,22 +200,22 @@ This is called **connection-relative linearity**.
 
 ### Verified computationally
 
-- 28 model-free CPU tests pass.
+- 39 model-free CPU tests pass.
 - Exact categorical curvature recovers $1/4$.
 - LC transport preserves Fisher length numerically.
-- Synthetic $e$, LC, $m$, and intermediate-alpha fields are recovered by the estimator.
+- Exact $e/m$ transport, LC length preservation, first-order alpha recovery, and the expected decrease of integrated-target finite-edge bias are verified.
 - The Pythia-14M decoder experiment runs on CPU with full-vocabulary geometry.
 
 ### Preliminary Pythia-14M observation
 
-Across four checkpoints, one seed, three hand-written semantic factorials, and eight matched random planes per context:
+Across four checkpoints, one seed, three hand-written semantic factorials, and eight Fisher-Haar planes per context:
 
 - metric condition numbers changed from about $1.27$ at initialization to roughly $3.1\times10^3$--$4.2\times10^3$ at the final checkpoint;
 - semantic sectional curvature changed from roughly $0.001$ at initialization to values between $-0.0445$ and $0.0211$ at the final checkpoint;
 - LC Fisher-length distortion stayed below $1.3\times10^{-16}$, while final-checkpoint mean absolute distortion was $0.0877$ for exponential and $0.4389$ for mixture transport;
 - unscaled finite mixture and ambient LC analogies left their valid domains, while exponential composition remained feasible.
 
-These are engineering results, not semantic evidence. The sample is far too small to establish a trend, and entropy and conditioning changed simultaneously.
+These are engineering results, not semantic evidence. The planes were not spectrum matched, eight controls permit no plus-one tail rank below \(1/9\), and that rank is not automatically a calibrated p-value for a hand-selected semantic plane. Semantic-minus-Haar differences were strongly confounded with metric conditioning, while entropy and conditioning also changed simultaneously.
 
 ### Still open
 
@@ -253,8 +257,8 @@ See [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for the complete design.
 ## Recommended reading order
 
 1. This overview.
-2. [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md) for the proof/disproof logic.
-3. [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md) for the first thesis-sized experiment.
-4. [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for causal training studies.
-5. [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md) for the full mathematics and literature boundary.
-6. [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md) for the original checkpoint/composition protocol.
+2. [paper/main.tex](paper/main.tex) for the authoritative theorems.
+3. [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md) for the corrected CPU design.
+4. [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md) for the complete audit disposition.
+5. [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for prospective causal studies.
+6. The broad-hypothesis, proposal, proof-memorandum, and research-note files only as development history.

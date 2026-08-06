@@ -12,7 +12,7 @@ The research task is to determine which tradeoff actual semantic composition fol
 
 The arXiv-style manuscript is in [`paper/main.tex`](paper/main.tex), with a verified PDF at [`output/pdf/predictive_geometric_agreement.pdf`](output/pdf/predictive_geometric_agreement.pdf).
 
-Its central result is a quantitative stability ladder from predictive-map agreement to Fisher metric, Amari alpha-connection, parallel-transport, and curvature agreement. It also proves that cross-entropy convergence alone is insufficient, gives a loss-to-transport theorem under Sobolev regularity, and separates predictive semantic insufficiency from connection mismatch through a conditional-variance decomposition.
+Its central result is a quantitative stability ladder from predictive-map agreement to Fisher metric, Amari alpha-connection, parallel-transport, and curvature agreement. The revised paper adds a square-root/Hellinger theorem whose Levi--Civita constants have no explicit vocabulary-size or minimum-token-probability dependence, and score-moment bounds for affine heads. It also proves that cross-entropy convergence alone is insufficient and states exactly when conditional variance is informative: only for a genuinely noninjective predictive map. A declared coarsening is handled by replacing the map, effect, and image geometry with their coarsened counterparts, not by conditioning the original tangent field on coarse labels.
 
 A key audit result is that “final-layer flatness” depends on the metric. Pulling back
 Euclidean distance between centered logits gives a constant flat metric, while pulling
@@ -20,13 +20,13 @@ back local KL/cross-entropy gives the probability-dependent Fisher metric studie
 
 ## Start here
 
+The manuscript and experiment protocol are authoritative. The older proof and proposal files are retained as development history and can contain superseded conjectures or terminology.
+
 - [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md): plain-language explanation of what is proved, what the pilot observed, and what remains open.
-- [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md): corrected broad hypothesis, connection-relative linearity, proof/disproof table, and expanded evidence program.
-- [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md): selected thesis-sized novelty, exact local results, literature boundary, and CPU-only experiment.
-- [TRAINING_REGIMES.md](TRAINING_REGIMES.md): matched CPU training objectives for testing whether a chosen connection causally improves semantic transfer.
-- [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md): audited theorems, counterexamples, closest prior art, and the defensible novelty boundary.
-- [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): pre-registered CPU program, controls, falsification criteria, and the Pythia-14M pilot.
-- [RESEARCH_NOTES.md](RESEARCH_NOTES.md): the original developing notebook and book-flatness explanation.
+- [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): current CPU protocol, spectrum-matched controls, numerical gates, finite-edge safeguards, falsification criteria, and the execution-only Pythia-14M pilot.
+- [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical and empirical audit finding.
+- [TRAINING_REGIMES.md](TRAINING_REGIMES.md): proposed matched training objectives; these remain future experiments rather than supported conclusions.
+- [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md), [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md), [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md), and [RESEARCH_NOTES.md](RESEARCH_NOTES.md): historical development notes, superseded wherever they conflict with the manuscript or protocol.
 
 ## Implemented code
 
@@ -41,7 +41,7 @@ back local KL/cross-entropy gives the probability-dependent Fisher metric studie
 
 ## Verification status
 
-- 28 automated CPU tests pass.
+- 39 automated CPU tests pass.
 - Saturated three-category curvature recovers \(K=1/4\), including a near-boundary stress test.
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.
@@ -49,7 +49,7 @@ back local KL/cross-entropy gives the probability-dependent Fisher metric studie
 - A real Pythia-14M pilot ran at four checkpoints with no GPU.
 - Small raw pilot JSON outputs are included under `results/`; downloaded model weights are excluded.
 
-The pilot is an implementation result, not evidence for a scientific conclusion: it uses one seed and three prompt families.
+The pilot is an implementation result, not evidence for a scientific conclusion: it uses one seed, three prompt families, and eight Fisher-Haar controls. Those controls are not spectrum matched and cannot resolve a one-sided Monte Carlo p-value below \(1/9\).
 
 ## Run tests
 
@@ -60,12 +60,12 @@ $env:PYTHONPATH=(Join-Path (Get-Location) 'src')
 
 The model-free geometry requires only NumPy. The Pythia experiment additionally requires CPU-only PyTorch, Transformers, and Safetensors; see `requirements-model.txt`.
 
-## Selected MSc contribution
+## Current MSc research target
 
 The broad “probabilistic embeddings instead of vectors” thesis is already occupied by information geometry, manifold embeddings, and recent 2026 work on softmax geometry and representation holonomy.
 
-The selected question is:
+The mathematical target is a vocabulary-independent stability theory:
 
-> Which information-geometric connection makes an observed context-dependent semantic vector field closest to parallel?
+> Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general Amari alpha-connection additionally requires stable third score moments. At affine softmax heads these quantities reduce to measurable second and third decoder moments.
 
-The proposed semantic alpha-index selects among exponential, Levi--Civita, mixture, or an intermediate alpha-connection using local held-out transport residuals. The previous curvature and three-connection work remains the mathematical foundation and a secondary analysis.
+The paired empirical question is which of exponential, Levi--Civita, mixture, or an intermediate alpha-connection predicts held-out semantic tangent fields and behavioral transfer. Ordinary vector reuse is the exponential arm, not a non-geometric baseline. A non-exponential winner must survive spectrum-matched controls, length-to-zero or integrated transport, multiple seeds, and behavioral evaluation.

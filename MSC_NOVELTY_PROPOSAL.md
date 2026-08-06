@@ -1,5 +1,7 @@
 # MSc thesis proposal: selecting the connection of a semantic vector field
 
+> **Historical proposal (superseded where inconsistent).** See [paper/main.tex](paper/main.tex), [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The closed-form alpha estimator below is first order and has generic \(O(\ell)\) finite-edge parameter bias; current use requires length-to-zero extrapolation or integrated transport and a connection-neutral tangent-field construction.
+
 **Literature audit date:** 4 August 2026
 **Status:** mathematically specified; synthetic implementation verified; language-model experiment not yet run
 **Compute assumption:** CPU only

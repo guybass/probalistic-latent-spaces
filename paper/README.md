@@ -4,12 +4,14 @@
 
 > **From Predictive Agreement to Geometric Agreement: Stability of Fisher Connections and Semantic Transport in Neural Representations**
 
-The paper develops four connected results:
+The paper develops six connected results:
 
-1. predictive-map agreement propagates quantitatively to Fisher metrics, Amari alpha-connections, parallel transport, and curvature under explicit regularity assumptions;
-2. cross-entropy convergence alone does not imply geometric convergence;
-3. cross-entropy plus uniform Sobolev regularity implies parallel-transport convergence at an explicit rate;
-4. conditional Fisher variance is the irreducible obstruction to representing a semantic operation as a field on the predictive quotient.
+1. exact predictive-image equivalence preserves Fisher--Amari geometry and intrinsic predictive fields;
+2. cross-entropy/KL convergence alone does not imply geometric convergence;
+3. general alpha-transport is stable under explicit probability-coordinate and rank regularity;
+4. square-root/Hellinger regularity gives vocabulary-independent Levi--Civita metric, transport, and curvature stability;
+5. integrated KL plus uniform Hilbert-valued Sobolev regularity implies Levi--Civita transport convergence without a token-probability floor;
+6. conditional Fisher variance is the irreducible obstruction to descending a semantic operation through a noninjective predictive map and vanishes at an injective head.
 
 ## Build
 
@@ -19,4 +21,4 @@ From this directory, run a LaTeX engine with BibTeX support. For example:
 tectonic main.tex
 ```
 
-The verified repository PDF is written to `../output/pdf/predictive_geometric_agreement.pdf`.
+After building and checking references, copy the verified PDF to `../output/pdf/predictive_geometric_agreement.pdf`.

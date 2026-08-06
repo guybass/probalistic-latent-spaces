@@ -123,7 +123,7 @@ class SemanticFieldTests(unittest.TestCase):
         self.assertGreater(errors[0] / errors[1], 3.8)
         self.assertLess(errors[0] / errors[1], 4.2)
 
-    def test_closed_form_fit_recovers_generating_alpha(self) -> None:
+    def test_closed_form_fit_recovers_its_first_order_fixture(self) -> None:
         geometry = self.geometry(self.start)
         alpha_true = 0.35
         displacements = [
@@ -154,6 +154,107 @@ class SemanticFieldTests(unittest.TestCase):
         self.assertAlmostEqual(result.alpha, alpha_true, places=12)
         self.assertAlmostEqual(result.residual_squared, 0.0, places=15)
         self.assertAlmostEqual(result.explained_fraction, 1.0, places=12)
+        self.assertGreater(result.max_edge_fisher_length, 0.0)
+        self.assertEqual(len(result.edge_fisher_lengths), len(displacements))
+        self.assertGreater(result.excitation_ratio, 0.0)
+        self.assertLess(
+            result.residual_squared,
+            min(
+                result.exponential_residual_squared,
+                result.levi_civita_residual_squared,
+                result.mixture_residual_squared,
+            ),
+        )
+
+    def test_weak_alpha_excitation_is_rejected(self) -> None:
+        geometry = self.geometry(self.start)
+        displacement = np.array([0.01, -0.02])
+        source = np.array([0.7, -0.2])
+        target = first_order_alpha_transport(
+            geometry,
+            displacement,
+            source,
+            alpha=0.35,
+        )
+        with self.assertRaisesRegex(ValueError, "weakly identified"):
+            fit_semantic_alpha(
+                [geometry],
+                [displacement],
+                [source],
+                [target],
+                excitation_rtol=1e6,
+            )
+
+    def test_integrated_transport_bias_decreases_with_edge_length(self) -> None:
+        geometry = self.geometry(self.start)
+        alpha_true = -1.0
+        directions = [
+            np.array([0.3, -0.5]),
+            np.array([-0.4, 0.2]),
+            np.array([0.25, 0.35]),
+        ]
+        source_vectors = [
+            np.array([0.7, -0.2]),
+            np.array([-0.1, 0.8]),
+            np.array([0.4, 0.3]),
+        ]
+
+        def fitted(scale: float):
+            displacements = [scale * direction for direction in directions]
+            target_vectors = [
+                alpha_parallel_transport(
+                    self.weights,
+                    self.bias,
+                    self.start,
+                    self.start + displacement,
+                    source,
+                    alpha=alpha_true,
+                )
+                for displacement, source in zip(displacements, source_vectors)
+            ]
+            return fit_semantic_alpha(
+                [geometry] * len(displacements),
+                displacements,
+                source_vectors,
+                target_vectors,
+            )
+
+        coarse = fitted(0.05)
+        fine = fitted(0.025)
+        self.assertLess(
+            abs(fine.alpha - alpha_true),
+            0.6 * abs(coarse.alpha - alpha_true),
+        )
+        self.assertAlmostEqual(
+            fine.max_edge_fisher_length,
+            0.5 * coarse.max_edge_fisher_length,
+            places=14,
+        )
+
+    def test_alpha_identifiability_guard_is_field_scale_invariant(self) -> None:
+        geometry = self.geometry(self.start)
+        displacement = np.array([0.01, -0.02])
+        source = np.array([0.7, -0.2])
+        target = first_order_alpha_transport(
+            geometry,
+            displacement,
+            source,
+            alpha=0.35,
+        )
+        ordinary = fit_semantic_alpha(
+            [geometry],
+            [displacement],
+            [source],
+            [target],
+        )
+        tiny_scale = 1e-9
+        rescaled = fit_semantic_alpha(
+            [geometry],
+            [displacement],
+            [tiny_scale * source],
+            [tiny_scale * target],
+        )
+        self.assertAlmostEqual(ordinary.alpha, rescaled.alpha, places=12)
 
     def test_transport_defect_is_scale_invariant(self) -> None:
         geometry = self.geometry(self.start)

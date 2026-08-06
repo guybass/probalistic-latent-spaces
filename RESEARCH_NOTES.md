@@ -1,5 +1,7 @@
 # Parallel Transport on Predictive Statistical Manifolds
 
+> **Historical notebook.** The authoritative results are [paper/main.tex](paper/main.tex), the current experiment is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the consolidated audit is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md).
+
 Research notes and experiment specification
 Date: 2026-08-04
 

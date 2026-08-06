@@ -41,9 +41,14 @@ class SemanticConnectionFit:
     beta: float
     residual_squared: float
     exponential_residual_squared: float
+    levi_civita_residual_squared: float
+    mixture_residual_squared: float
     explained_fraction: float
     denominator: float
+    excitation_ratio: float
     edge_count: int
+    edge_fisher_lengths: tuple[float, ...]
+    max_edge_fisher_length: float
 
 
 def softmax_probabilities(
@@ -104,7 +109,7 @@ def local_transport_defect_scalar(
     if ga <= 0.0 or gv <= 0.0:
         raise ValueError("directions must have positive Fisher norm")
     covector = geometry.cubic_contraction(a, v)
-    raised = np.linalg.solve(geometry.metric, covector)
+    raised = geometry.solve_metric(covector)
     squared = float(covector @ raised)
     # Roundoff can produce a tiny negative value for a theoretically nonnegative
     # quadratic form.
@@ -117,6 +122,8 @@ def fit_semantic_alpha(
     displacements: Sequence[ArrayLike],
     source_vectors: Sequence[ArrayLike],
     target_vectors: Sequence[ArrayLike],
+    *,
+    excitation_rtol: float = 1e-8,
 ) -> SemanticConnectionFit:
     """Fit the alpha-connection that makes a sampled field most parallel.
 
@@ -129,8 +136,15 @@ def fit_semantic_alpha(
     the closed-form solution
 
     ``beta_hat = -sum <Delta V,B>_G / sum ||B||_G^2``.
+
+    This is an infinitesimal estimator.  Relative to integrated finite-edge
+    transport its alpha error is generically first order in edge length.  The
+    returned maximum source-Fisher edge length must therefore be reported, and
+    scientific use requires a length-to-zero extrapolation or an integrated fit.
     """
 
+    if not np.isfinite(excitation_rtol) or excitation_rtol <= 0.0:
+        raise ValueError("excitation_rtol must be finite and positive")
     count = len(source_geometries)
     if count == 0:
         raise ValueError("at least one edge is required")
@@ -145,6 +159,8 @@ def fit_semantic_alpha(
     numerator = 0.0
     denominator = 0.0
     baseline = 0.0
+    excitation_scale = 0.0
+    edge_fisher_lengths: list[float] = []
     edge_terms: list[tuple[Matrix, Vector, Vector]] = []
     for geometry, displacement, source, target in zip(
         source_geometries,
@@ -158,21 +174,42 @@ def fit_semantic_alpha(
         field_change = target_vec - source_vec
         connection_term = geometry.cubic_operator(delta) @ source_vec
         metric = geometry.metric
+        edge_squared = float(delta @ metric @ delta)
+        edge_fisher_lengths.append(float(np.sqrt(max(edge_squared, 0.0))))
+        source_squared = float(source_vec @ metric @ source_vec)
         numerator += float(field_change @ metric @ connection_term)
         denominator += float(connection_term @ metric @ connection_term)
         baseline += float(field_change @ metric @ field_change)
+        excitation_scale += max(edge_squared, 0.0) * max(source_squared, 0.0)
         edge_terms.append((metric, field_change, connection_term))
 
-    scale = max(baseline, 1.0)
-    if denominator <= np.finfo(np.float64).eps * scale:
+    if (
+        not np.isfinite(denominator)
+        or not np.isfinite(excitation_scale)
+        or denominator <= np.finfo(np.float64).tiny
+        or excitation_scale <= np.finfo(np.float64).tiny
+    ):
         raise ValueError(
             "alpha is not identifiable: all cubic connection terms vanish"
         )
+    excitation_ratio = denominator / excitation_scale
+    if not np.isfinite(excitation_ratio) or excitation_ratio < excitation_rtol:
+        raise ValueError(
+            "alpha is weakly identified: dimensionless cubic excitation "
+            f"{excitation_ratio:.3e} is below {excitation_rtol:.3e}"
+        )
     beta = -numerator / denominator
-    residual = 0.0
-    for metric, field_change, connection_term in edge_terms:
-        error = field_change + beta * connection_term
-        residual += float(error @ metric @ error)
+
+    def pooled_residual(candidate_beta: float) -> float:
+        residual = 0.0
+        for metric, field_change, connection_term in edge_terms:
+            error = field_change + candidate_beta * connection_term
+            residual += float(error @ metric @ error)
+        return residual
+
+    residual = pooled_residual(beta)
+    levi_civita_residual = pooled_residual(0.5)
+    mixture_residual = pooled_residual(1.0)
     explained = (
         1.0 - residual / baseline
         if baseline > np.finfo(np.float64).tiny
@@ -183,9 +220,14 @@ def fit_semantic_alpha(
         beta=beta,
         residual_squared=residual,
         exponential_residual_squared=baseline,
+        levi_civita_residual_squared=levi_civita_residual,
+        mixture_residual_squared=mixture_residual,
         explained_fraction=explained,
         denominator=denominator,
+        excitation_ratio=excitation_ratio,
         edge_count=count,
+        edge_fisher_lengths=tuple(edge_fisher_lengths),
+        max_edge_fisher_length=max(edge_fisher_lengths),
     )
 
 
@@ -234,10 +276,7 @@ def alpha_parallel_transport(
             softmax_probabilities(weights, bias_vec, end_vec),
             eigenvalue_rtol=eigenvalue_rtol,
         )
-        return np.linalg.solve(
-            end_geometry.metric,
-            start_geometry.metric @ value,
-        )
+        return end_geometry.solve_metric(start_geometry.metric @ value)
 
     beta = 0.5 * (1.0 - float(alpha))
     step_size = 1.0 / steps
