@@ -123,6 +123,16 @@ class SoftmaxHessianGeometry:
         lowered = 0.5 * (lowered + lowered.T)
         return self.solve_metric(lowered)
 
+    def cubic_action(self, u: ArrayLike, v: ArrayLike) -> Vector:
+        """Return ``A_u v`` without materializing the full ``d``-by-``d`` operator.
+
+        This is exactly ``solve_metric(cubic_contraction(u, v))``.  It is the
+        preferred path for transport and field fitting, where only one action
+        of the Amari--Chentsov operator is needed.
+        """
+
+        return self.solve_metric(self.cubic_contraction(u, v))
+
     def square_root_second_derivative_norm(
         self,
         u: ArrayLike,
@@ -146,7 +156,7 @@ class SoftmaxHessianGeometry:
         return 0.5 * float(np.sqrt(max(fourth_score_moment, 0.0)))
 
     def solve_metric(self, right_hand_side: ArrayLike) -> Matrix:
-        """Solve a Fisher linear system subject to both numerical gates."""
+        """Solve a Fisher linear system using the cached spectral factorization."""
 
         rhs = np.asarray(right_hand_side, dtype=np.float64)
         if rhs.ndim not in (1, 2) or rhs.shape[0] != self.hidden_dim:
@@ -155,10 +165,18 @@ class SoftmaxHessianGeometry:
             )
         if not np.all(np.isfinite(rhs)):
             raise ValueError("right_hand_side must contain only finite values")
-        solution, _, _ = self._checked_metric_solve(
+        projected = self.eigenvectors.T @ rhs
+        if rhs.ndim == 1:
+            scaled = projected / self.eigenvalues
+        else:
+            scaled = projected / self.eigenvalues[:, None]
+        solution = self.eigenvectors @ scaled
+        self._validate_metric_solution(
             self.metric,
             rhs,
+            solution,
             self.metric_condition_number,
+            metric_norm=self.metric_max_eigenvalue,
         )
         return solution
 
@@ -328,10 +346,35 @@ class SoftmaxHessianGeometry:
         """Return a solve and backward/condition-weighted residual diagnostics."""
 
         solution = np.linalg.solve(metric, right_hand_side)
+        relative_residual, condition_weighted_residual = (
+            self._validate_metric_solution(
+                metric,
+                right_hand_side,
+                solution,
+                condition_number,
+            )
+        )
+        return solution, relative_residual, condition_weighted_residual
+
+    def _validate_metric_solution(
+        self,
+        metric: Matrix,
+        right_hand_side: Matrix,
+        solution: Matrix,
+        condition_number: float,
+        *,
+        metric_norm: float | None = None,
+    ) -> tuple[float, float]:
+        """Apply backward- and condition-weighted-residual gates to a solve."""
+
         residual = metric @ solution - right_hand_side
+        coefficient_norm = (
+            float(metric_norm)
+            if metric_norm is not None
+            else float(np.linalg.norm(metric, ord=2))
+        )
         residual_denominator = (
-            np.linalg.norm(metric, ord=2)
-            * np.linalg.norm(solution, ord=2)
+            coefficient_norm * np.linalg.norm(solution, ord=2)
             + np.linalg.norm(right_hand_side, ord=2)
         )
         relative_residual = float(
@@ -356,7 +399,7 @@ class SoftmaxHessianGeometry:
                 f"{condition_weighted_residual:.3e} > "
                 f"{self.solve_forward_error_rtol:.3e}"
             )
-        return solution, relative_residual, condition_weighted_residual
+        return relative_residual, condition_weighted_residual
 
     def random_fisher_orthonormal_plane(
         self,
@@ -416,12 +459,15 @@ class SoftmaxHessianGeometry:
         v: ArrayLike,
         rng: np.random.Generator,
         *,
+        band_mode: str = "relative-gap",
         eigenspace_rtol: float = 1e-6,
+        log10_band_width: float = 1.0,
     ) -> tuple[Vector, Vector]:
         """Randomize a plane while matching its Fisher spectral leverage.
 
         The source plane is Fisher-orthonormalized and whitened.  Eigenvalues are
-        partitioned at relative eigengaps larger than ``eigenspace_rtol``.  A
+        partitioned either at relative eigengaps larger than
+        ``eigenspace_rtol`` or into relative log-spectrum bands.  A
         Haar orthogonal rotation is applied inside every multi-axis band; a
         singleton receives a random sign.  This preserves each band's 2-by-2
         leverage contribution and is invariant to the arbitrary basis chosen
@@ -429,7 +475,11 @@ class SoftmaxHessianGeometry:
         control, unlike a Fisher-Haar plane.
         """
 
-        bands = self.eigenvalue_bands(eigenspace_rtol=eigenspace_rtol)
+        bands = self.control_eigenvalue_bands(
+            band_mode=band_mode,
+            eigenspace_rtol=eigenspace_rtol,
+            log10_band_width=log10_band_width,
+        )
         source_u, source_v = self.fisher_orthonormalize_plane(u, v)
         source = np.column_stack((source_u, source_v))
         whitened = (
@@ -479,6 +529,52 @@ class SoftmaxHessianGeometry:
                 start = index
         boundaries.append((start, self.hidden_dim))
         return tuple(boundaries)
+
+    def relative_log_eigenvalue_bands(
+        self,
+        *,
+        log10_band_width: float = 1.0,
+    ) -> tuple[tuple[int, int], ...]:
+        """Return scale-invariant bands of relative log-eigenvalue width.
+
+        A width of one groups axes by decades below the largest eigenvalue.
+        This deliberately creates coarser control orbits than near-degenerate
+        eigenspace bands and is useful as a control-sensitivity analysis.
+        """
+
+        if not np.isfinite(log10_band_width) or log10_band_width <= 0.0:
+            raise ValueError("log10_band_width must be finite and positive")
+        log_distance = np.log10(
+            self.metric_max_eigenvalue / self.eigenvalues
+        )
+        labels = np.floor(log_distance / log10_band_width + 1e-12).astype(int)
+        boundaries: list[tuple[int, int]] = []
+        start = 0
+        for index in range(1, self.hidden_dim):
+            if labels[index] != labels[index - 1]:
+                boundaries.append((start, index))
+                start = index
+        boundaries.append((start, self.hidden_dim))
+        return tuple(boundaries)
+
+    def control_eigenvalue_bands(
+        self,
+        *,
+        band_mode: str = "relative-gap",
+        eigenspace_rtol: float = 1e-6,
+        log10_band_width: float = 1.0,
+    ) -> tuple[tuple[int, int], ...]:
+        """Return the declared spectral bands for matched-plane controls."""
+
+        if band_mode == "relative-gap":
+            return self.eigenvalue_bands(eigenspace_rtol=eigenspace_rtol)
+        if band_mode == "relative-log":
+            return self.relative_log_eigenvalue_bands(
+                log10_band_width=log10_band_width
+            )
+        raise ValueError(
+            "band_mode must be either 'relative-gap' or 'relative-log'"
+        )
 
 
 def _inputs(

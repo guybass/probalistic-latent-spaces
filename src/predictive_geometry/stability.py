@@ -4,7 +4,9 @@ For the categorical square-root map ``psi = 2 * sqrt(p)``, the Fisher metric
 is ``g = Dpsi.T @ Dpsi``.  Its Levi--Civita connection can therefore be
 controlled without a vocabulary-size factor or a tokenwise probability floor.
 The same square-root regularity does *not* automatically control a nonzero
-Amari alpha-connection: its cubic tensor contains
+Amari alpha-connection.  Paired phase-shifted Bernoulli maps can converge in
+square-root ``C2`` with identical unit Fisher metrics while their fixed
+nonzero-alpha connection defect diverges.  The cubic tensor contains
 
 ``C_ijk = 2 * sum_a D_i psi_a D_j psi_a D_k psi_a / psi_a``.
 

@@ -49,6 +49,53 @@ class StabilityDiagnosticsTests(unittest.TestCase):
             places=13,
         )
 
+    def test_paired_bernoulli_sqrt_agreement_has_diverging_alpha_defect(
+        self,
+    ) -> None:
+        def square_root_jet(theta: float) -> tuple[np.ndarray, ...]:
+            psi = 2.0 * np.array(
+                [np.sin(theta / 2.0), np.cos(theta / 2.0)]
+            )
+            first = np.array(
+                [[np.cos(theta / 2.0)], [-np.sin(theta / 2.0)]]
+            )
+            second = -0.5 * np.array(
+                [np.sin(theta / 2.0), np.cos(theta / 2.0)]
+            )
+            cubic = float(square_root_cubic_tensor(psi, first)[0, 0, 0])
+            return psi, first[:, 0], second, np.array([cubic])
+
+        agreements = []
+        connection_defects = []
+        for epsilon in (0.1, 0.05, 0.025):
+            first_jet = square_root_jet(epsilon)
+            second_jet = square_root_jet(2.0 * epsilon)
+            agreements.append(
+                max(
+                    np.linalg.norm(left - right)
+                    for left, right in zip(first_jet[:3], second_jet[:3])
+                )
+            )
+            # For alpha=1 and g=1, Gamma^(1)=-C/2.
+            connection_defects.append(
+                0.5 * abs(float(first_jet[3][0] - second_jet[3][0]))
+            )
+            self.assertAlmostEqual(
+                float(first_jet[1] @ first_jet[1]),
+                1.0,
+                places=14,
+            )
+            self.assertAlmostEqual(
+                float(second_jet[1] @ second_jet[1]),
+                1.0,
+                places=14,
+            )
+
+        self.assertGreater(agreements[0], agreements[1])
+        self.assertGreater(agreements[1], agreements[2])
+        self.assertLess(connection_defects[0], connection_defects[1])
+        self.assertLess(connection_defects[1], connection_defects[2])
+
     def test_lc_bounds_use_sharper_isometric_branch(self) -> None:
         bounds = levi_civita_stability_bounds(
             first_derivative_bound=2.0,

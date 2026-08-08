@@ -98,8 +98,13 @@ def main() -> None:
                     "estimated_alpha": fit.alpha,
                     "absolute_error": abs(fit.alpha - true_alpha),
                     "excitation_ratio": fit.excitation_ratio,
+                    "transport_integration_method": (
+                        "exact closed form"
+                        if true_alpha in (-1.0, 1.0)
+                        else "fixed-step RK4"
+                    ),
                     "rk4_32_to_64_max_euclidean_difference": (
-                        max(refinement_errors) if refinement_errors else 0.0
+                        max(refinement_errors) if refinement_errors else None
                     ),
                     "unrestricted_residual_squared": fit.residual_squared,
                     "exponential_residual_squared": (

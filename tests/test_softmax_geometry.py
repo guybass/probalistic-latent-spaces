@@ -134,6 +134,15 @@ class SoftmaxGeometryTests(unittest.TestCase):
             places=13,
         )
 
+    def test_cubic_action_matches_materialized_operator(self) -> None:
+        geometry = SoftmaxHessianGeometry(self.weights, self.p)
+        np.testing.assert_allclose(
+            geometry.cubic_action(self.u, self.v),
+            geometry.cubic_operator(self.u) @ self.v,
+            atol=2e-15,
+            rtol=2e-14,
+        )
+
     def test_cubic_tensor_is_metric_derivative_under_hidden_translation(self) -> None:
         geometry = SoftmaxHessianGeometry(self.weights, self.p)
         base_h = np.log(self.p[:2] / self.p[2])
@@ -335,6 +344,56 @@ class SoftmaxGeometryTests(unittest.TestCase):
             np.allclose(np.abs(control), np.column_stack((source_u, source_v)))
         )
 
+    def test_relative_log_bands_preserve_band_leverage(self) -> None:
+        eigenvalues = np.array([0.0011, 0.004, 0.03, 0.4, 1.0])
+        dimension = len(eigenvalues)
+        scales = np.sqrt(dimension * eigenvalues)
+        weights = np.vstack((np.diag(scales), -np.diag(scales)))
+        probabilities = np.full(2 * dimension, 1.0 / (2 * dimension))
+        geometry = SoftmaxHessianGeometry(weights, probabilities)
+        np.testing.assert_allclose(
+            geometry.metric,
+            np.diag(eigenvalues),
+            atol=2e-16,
+        )
+        bands = geometry.relative_log_eigenvalue_bands(log10_band_width=1.0)
+        self.assertEqual(bands, ((0, 2), (2, 3), (3, 5)))
+
+        source_u = np.array([1.0, 0.2, -0.3, 0.4, 0.1])
+        source_v = np.array([-0.1, 0.9, 0.3, 0.2, -0.5])
+        orthonormal_u, orthonormal_v = geometry.fisher_orthonormalize_plane(
+            source_u,
+            source_v,
+        )
+        control_u, control_v = geometry.spectrum_matched_control_plane(
+            source_u,
+            source_v,
+            np.random.default_rng(37),
+            band_mode="relative-log",
+            log10_band_width=1.0,
+        )
+        source = np.column_stack((orthonormal_u, orthonormal_v))
+        control = np.column_stack((control_u, control_v))
+        source_whitened = (
+            np.sqrt(geometry.eigenvalues)[:, None]
+            * (geometry.eigenvectors.T @ source)
+        )
+        control_whitened = (
+            np.sqrt(geometry.eigenvalues)[:, None]
+            * (geometry.eigenvectors.T @ control)
+        )
+        for start, stop in bands:
+            np.testing.assert_allclose(
+                source_whitened[start:stop].T @ source_whitened[start:stop],
+                control_whitened[start:stop].T @ control_whitened[start:stop],
+                atol=2e-12,
+            )
+        np.testing.assert_allclose(
+            control.T @ geometry.metric @ control,
+            np.eye(2),
+            atol=2e-12,
+        )
+
     def test_nonfinite_numerical_thresholds_are_rejected(self) -> None:
         for keyword in (
             "eigenvalue_rtol",
@@ -356,6 +415,21 @@ class SoftmaxGeometryTests(unittest.TestCase):
                 self.v,
                 np.random.default_rng(0),
                 eigenspace_rtol=float("nan"),
+            )
+        with self.assertRaisesRegex(ValueError, "log10_band_width"):
+            geometry.spectrum_matched_control_plane(
+                self.u,
+                self.v,
+                np.random.default_rng(0),
+                band_mode="relative-log",
+                log10_band_width=0.0,
+            )
+        with self.assertRaisesRegex(ValueError, "band_mode"):
+            geometry.spectrum_matched_control_plane(
+                self.u,
+                self.v,
+                np.random.default_rng(0),
+                band_mode="unknown",
             )
 
     def test_plane_gate_is_distinct_from_metric_rank_gate(self) -> None:

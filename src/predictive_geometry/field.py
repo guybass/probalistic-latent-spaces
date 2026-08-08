@@ -84,7 +84,7 @@ def first_order_alpha_transport(
     delta = _vector(displacement, geometry.hidden_dim, "displacement")
     value = _vector(vector, geometry.hidden_dim, "vector")
     beta = 0.5 * (1.0 - float(alpha))
-    return value - beta * (geometry.cubic_operator(delta) @ value)
+    return value - beta * geometry.cubic_action(delta, value)
 
 
 def local_transport_defect_scalar(
@@ -172,7 +172,7 @@ def fit_semantic_alpha(
         source_vec = _vector(source, geometry.hidden_dim, "source_vector")
         target_vec = _vector(target, geometry.hidden_dim, "target_vector")
         field_change = target_vec - source_vec
-        connection_term = geometry.cubic_operator(delta) @ source_vec
+        connection_term = geometry.cubic_action(delta, source_vec)
         metric = geometry.metric
         edge_squared = float(delta @ metric @ delta)
         edge_fisher_lengths.append(float(np.sqrt(max(edge_squared, 0.0))))
@@ -288,7 +288,7 @@ def alpha_parallel_transport(
             softmax_probabilities(weights, bias_vec, hidden),
             eigenvalue_rtol=eigenvalue_rtol,
         )
-        return -beta * (geometry.cubic_operator(displacement) @ transported)
+        return -beta * geometry.cubic_action(displacement, transported)
 
     for index in range(steps):
         time = index * step_size

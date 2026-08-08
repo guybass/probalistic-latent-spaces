@@ -107,7 +107,9 @@ def run_checkpoint(
     same_plane_curvature_rtol: float,
     vocabulary_chunk_size: int,
     chunking_curvature_rtol: float,
+    spectrum_band_mode: str,
     eigenspace_rtol: float,
+    log10_band_width: float,
 ) -> dict[str, Any]:
     tokenizer = AutoTokenizer.from_pretrained(
         model_name,
@@ -201,7 +203,9 @@ def run_checkpoint(
                         direction_a,
                         direction_b,
                         rng,
+                        band_mode=spectrum_band_mode,
                         eigenspace_rtol=eigenspace_rtol,
+                        log10_band_width=log10_band_width,
                     )
                 else:
                     random_u, random_v = geometry.random_fisher_orthonormal_plane(
@@ -264,16 +268,30 @@ def run_checkpoint(
                 ),
                 "control_mode": control_mode,
                 "control_seed": control_seed,
-                "eigenspace_rtol": (
-                    eigenspace_rtol
+                "spectrum_band_mode": (
+                    spectrum_band_mode
                     if control_mode == "spectrum-block"
                     else None
                 ),
-                "eigenspace_band_sizes": (
+                "eigenspace_rtol": (
+                    eigenspace_rtol
+                    if control_mode == "spectrum-block"
+                    and spectrum_band_mode == "relative-gap"
+                    else None
+                ),
+                "log10_band_width": (
+                    log10_band_width
+                    if control_mode == "spectrum-block"
+                    and spectrum_band_mode == "relative-log"
+                    else None
+                ),
+                "spectrum_band_sizes": (
                     [
                         stop - start
-                        for start, stop in geometry.eigenvalue_bands(
-                            eigenspace_rtol=eigenspace_rtol
+                        for start, stop in geometry.control_eigenvalue_bands(
+                            band_mode=spectrum_band_mode,
+                            eigenspace_rtol=eigenspace_rtol,
+                            log10_band_width=log10_band_width,
                         )
                     ]
                     if control_mode == "spectrum-block"
@@ -335,7 +353,9 @@ def run_checkpoint(
         "same_plane_curvature_rtol": same_plane_curvature_rtol,
         "vocabulary_chunk_size": vocabulary_chunk_size,
         "chunking_curvature_rtol": chunking_curvature_rtol,
+        "spectrum_band_mode": spectrum_band_mode,
         "eigenspace_rtol": eigenspace_rtol,
+        "log10_band_width": log10_band_width,
         "results": checkpoint_results,
     }
     del model, tokenizer, unembedding
@@ -364,7 +384,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--same-plane-curvature-rtol", type=float, default=1e-10)
     parser.add_argument("--vocabulary-chunk-size", type=int, default=4096)
     parser.add_argument("--chunking-curvature-rtol", type=float, default=1e-7)
+    parser.add_argument(
+        "--spectrum-band-mode",
+        choices=("relative-gap", "relative-log"),
+        default="relative-gap",
+    )
     parser.add_argument("--eigenspace-rtol", type=float, default=1e-6)
+    parser.add_argument("--log10-band-width", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=20260804)
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--quiet", action="store_true")
@@ -404,6 +430,8 @@ def main() -> None:
         or args.eigenspace_rtol >= 1.0
     ):
         raise ValueError("--eigenspace-rtol must be finite and in [0, 1)")
+    if not np.isfinite(args.log10_band_width) or args.log10_band_width <= 0.0:
+        raise ValueError("--log10-band-width must be finite and positive")
     torch.set_num_threads(args.threads)
     args.cache_dir.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -427,7 +455,9 @@ def main() -> None:
                 args.same_plane_curvature_rtol,
                 args.vocabulary_chunk_size,
                 args.chunking_curvature_rtol,
+                args.spectrum_band_mode,
                 args.eigenspace_rtol,
+                args.log10_band_width,
             )
             for revision in args.revisions
         ],

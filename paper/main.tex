@@ -46,7 +46,7 @@ Stability of Fisher Connections and Semantic Transport in Neural Representations
 \maketitle
 
 \begin{abstract}
-A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari--Chentsov tensor. We establish a stability hierarchy for comparing this geometry across models. Exact equality of predictive images preserves every Amari $\alpha$-connection, transport, curvature, and intrinsic predictive field. Uniform KL convergence alone does not imply even pointwise Fisher-metric convergence. General $\alpha$-transport is stable under uniform interiority, nondegeneracy, and $C^2$ predictive agreement, but the resulting worst-case constants are poorly adapted to large vocabularies. For the Levi--Civita connection we remove both the vocabulary-size and minimum-token-probability dependence: $C^2$ closeness of the square-root predictive maps controls the connection and transport, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies this closeness at an explicit rate. A boundary Bernoulli family proves that the same square-root regularity cannot control any fixed nonzero-$\alpha$ connection without additional information. Score-moment identities identify the required raised third-order moment and yield probability-floor-free formulas at affine softmax heads. Finally, conditional Fisher variance is the exact obstruction to descending a semantic effect through a noninjective predictive map; it vanishes identically when that map is injective. Constant vector reuse at an affine head is exponential transport on the ambient intervention family, so superiority of any other connection is a held-out empirical hypothesis rather than a consequence of pretraining.
+A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari--Chentsov tensor. We establish a stability hierarchy for comparing this geometry across models. Exact equality of predictive images preserves every Amari $\alpha$-connection, transport, curvature, and intrinsic predictive field. Uniform KL convergence alone does not imply even pointwise Fisher-metric convergence. General $\alpha$-transport is stable under uniform interiority, nondegeneracy, and $C^2$ predictive agreement, but the resulting worst-case constants are poorly adapted to large vocabularies. For the Levi--Civita connection we remove both the vocabulary-size and minimum-token-probability dependence: $C^2$ closeness of the square-root predictive maps controls the connection and transport, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies this closeness at an explicit rate. A paired boundary Bernoulli construction proves that the same square-root regularity cannot control any fixed nonzero-$\alpha$ connection without additional information. Score-moment identities identify the required raised third-order moment and yield probability-floor-free formulas at affine softmax heads. Finally, conditional Fisher variance is the exact obstruction to descending a semantic effect through a noninjective predictive map; it vanishes identically when that map is injective. Constant vector reuse at an affine head is exponential transport on the ambient intervention family, so superiority of any other connection is a held-out empirical hypothesis rather than a consequence of pretraining.
 \end{abstract}
 
 \section{Introduction}
@@ -67,7 +67,7 @@ The analysis proceeds through six results:
     \item Exact predictive naturality: two identifiable parameterizations of the same predictive family preserve the Fisher metric, Amari-Chentsov tensor, every $\alpha$-connection, parallel transport, and curvature up to reparameterization; every common smooth field on the shared predictive image pulls back equivariantly.
     \item Separation of predictive and geometric convergence: a smooth, uniformly regular Bernoulli family converges uniformly in KL while its Fisher metric fails to converge at a fixed point.
     \item Quantitative $C^k$ stability: on compact uniformly interior and uniformly identifiable families, $C^2$ predictive closeness controls the defect between aligned $\alpha$-connections and the commutator of their parallel transports, while $C^3$ closeness controls curvature.
-    \item A connection-selective boundary result: square-root regularity removes explicit vocabulary-size and minimum-probability factors from Levi--Civita bounds, but a Bernoulli family proves that it cannot control any fixed nonzero-$\alpha$ connection without an additional raised-third-moment assumption.
+    \item A sharp connection-selective boundary result: square-root regularity removes explicit vocabulary-size and minimum-probability factors from Levi--Civita bounds, while paired Bernoulli families converge in square-root $C^2$ even as every fixed nonzero-$\alpha$ connection defect diverges.
     \item Loss-to-geometry implications under explicit regularity: integrated KL plus uniform Sobolev control of either probability coordinates or square-root coordinates yields transport convergence; the latter result is vocabulary independent for Levi--Civita transport.
     \item Semantic conditional-variance decompositions: two orthogonal identities separately isolate failure to descend through a noninjective predictive map from connection mismatch and from cross-model conditional-mean-field mismatch.
 \end{enumerate}
@@ -600,6 +600,32 @@ Consequently,
 which diverges for every $\alpha\ne0$. Thus square-root $C^2$ control and a perfect Fisher spectral floor are sufficient for Levi--Civita stability but not for a general $\alpha$-connection. At an affine softmax head in natural coordinates, Proposition~\ref{prop:score-moments} supplies a separate moment-based route and $\Gamma^{(1)}=0$ identically.
 \end{proof}
 
+\begin{corollary}[Sharp connection selectivity of square-root control]\label{cor:alpha-zero-selectivity}
+Within the Amari $\alpha$-family, $\alpha=0$ is the unique fixed parameter for which uniform square-root $C^2$ bounds, square-root $C^2$ agreement, and a Fisher spectral floor alone imply uniform connection stability in a declared background chart. More precisely, for every fixed $\alpha\ne0$ there are pairs of Bernoulli predictive maps on the same compact chart such that their square-root maps converge to one another in $C^2$, both Fisher metrics are identically one, and yet
+\begin{equation}
+    \|\Gamma_{p_n}^{(\alpha)}-
+      \Gamma_{\widetilde p_n}^{(\alpha)}\|_{C^0}
+    \longrightarrow\infty.
+    \label{eq:nonzero-alpha-pair-divergence}
+\end{equation}
+This is a uniqueness statement only for stability from these stated data; it is not a claim that Levi--Civita is the unique geometrically natural connection.
+\end{corollary}
+
+\begin{proof}
+The $\alpha=0$ implication is Theorem~\ref{thm:sqrt-lc-stability}. For the converse, let $K=[0,1]$, $\varepsilon_n=1/n$, and use the Bernoulli construction in Proposition~\ref{prop:boundary-alpha-separation} with angles
+\begin{equation}
+    \theta_n(x)=x+\varepsilon_n,
+    \qquad
+    \widetilde\theta_n(x)=x+2\varepsilon_n.
+\end{equation}
+The associated square-root maps are phase shifts of the same radius-two circle and therefore converge to one another in $C^2(K)$ at rate $O(\varepsilon_n)$; their first and second derivative envelopes are respectively one and one half, and both induced metrics are $\dd x^2$. At $x=0$ their connection-coefficient defect is
+\begin{equation}
+    |\alpha|\,|\cot\varepsilon_n-\cot(2\varepsilon_n)|
+    \sim \frac{|\alpha|}{2\varepsilon_n},
+\end{equation}
+which proves \eqref{eq:nonzero-alpha-pair-divergence}.
+\end{proof}
+
 \begin{remark}[Why the assumptions matter]
 The probability-coordinate constants in Theorems~\ref{thm:c2-stability} and \ref{thm:c3-curvature} diverge near $p_a=0$ because their uniform class controls derivatives of $p_a$ independently of $p_a$. This is not always an intrinsic blow-up of the pulled-back geometry: Theorem~\ref{thm:sqrt-lc-stability} captures cancellations through square-root derivatives, while Proposition~\ref{prop:score-moments} captures them through probability-weighted score moments. Rank loss remains intrinsic because raising indices requires $g^{-1}$. For nonzero $\alpha$, the raised third score moment supplies information not determined by the Fisher metric alone and must be controlled explicitly; uniform interiority is sufficient but not logically necessary. Vocabulary independence means that no explicit $N$ occurs in the displayed constants; the derivative bounds and spectral floor must still be uniform and may deteriorate with model scale. The estimates are conditional finite-scale bounds, not numerical certificates until those quantities are measured.
 \end{remark}
@@ -902,7 +928,7 @@ The first regularizer is included only for a declared noninjective predictive ma
 
 A no-GPU pilot can use frozen small models and one- or two-dimensional soft-prompt charts. Finite differences estimate $F$, $\partial F$, and $\partial^2F$; the model's output head provides exact vocabulary probabilities. The main comparisons are output KL, metric defect, the transport score \eqref{eq:pt-score}, connection residual, and held-out intervention transfer. Conditional variance is added only at a representation with verified nontrivial predictive fibers or after a complete coarsened map, effect, and image geometry are explicitly defined.
 
-An inferential curvature study must also separate semantic structure from Fisher-spectrum alignment. Isotropic Fisher--Haar planes answer a literal isotropic null but are not spectrum matched. A task-specific analysis should preserve the semantic plane's leverage across preregistered Fisher spectral bands, using signs for singleton bands and basis-invariant Haar rotations inside repeated or clustered bands. Its plus-one control-tail rank is a calibrated randomization $p$-value only under an explicit conditional invariance null for that block-orthogonal group; direction and multiplicity must also be preregistered. First-order $\alpha$ fits must be extrapolated to zero edge length or replaced by integrated transport; their finite-edge parameter error is generically first order in Fisher length.
+An inferential curvature study must also separate semantic structure from Fisher-spectrum alignment. Isotropic Fisher--Haar planes answer a literal isotropic null but are not spectrum matched. A task-specific analysis should preserve the semantic plane's leverage across preregistered Fisher spectral bands, using signs for singleton bands and basis-invariant Haar rotations inside repeated or clustered bands. Fine relative-gap bands can reduce the control orbit mostly to sign flips, so the analysis must be repeated with preregistered coarser relative-log bands and conclusions that change with the band rule must be labeled control-sensitive. A plus-one control-tail rank is a calibrated randomization $p$-value only under the explicit conditional invariance null for its declared block-orthogonal group; direction and multiplicity must also be preregistered. First-order $\alpha$ fits must be extrapolated to zero edge length or replaced by integrated transport; their finite-edge parameter error is generically first order in Fisher length.
 
 \section{Limitations}
 
@@ -1011,7 +1037,16 @@ Because $\E_p[S(u)S(v)]=g(u,v)$, expansion of the squared norm gives
     =\frac14\E_p[S_Y(u)^2S_Y(v)^2].
     \label{eq:b2-fourth-moment}
 \end{equation}
-Thus the missing $B_2$ envelope is measurable as a supremum of fourth score moments along the declared chart. Proposition~\ref{prop:score-moments} separately supplies the third moment needed by nonzero-$\alpha$ connections and the exact cancellation $\Gamma^{(1)}=0$ in natural affine-head coordinates.
+By Cauchy--Schwarz, the associated bilinear operator norm has the exact pointwise form
+\begin{equation}
+    \|D^2\psi_x\|_{\op}
+    =\frac12
+      \left(
+        \sup_{|u|\le1}\E_{p(x)}[S_Y(u)^4]
+      \right)^{1/2}.
+    \label{eq:b2-exact-fourth-envelope}
+\end{equation}
+Indeed, the mixed fourth moment is at most the geometric mean of the two pure fourth moments, while choosing $u=v$ at a maximizer attains the supremum. Thus the missing uniform $B_2$ envelope is exactly one half of the square root of the worst fourth score moment over chart-unit directions and points on the declared domain. Finite directional probes estimate this quantity but do not certify the supremum. Proposition~\ref{prop:score-moments} separately supplies the third moment needed by nonzero-$\alpha$ connections and the exact cancellation $\Gamma^{(1)}=0$ in natural affine-head coordinates.
 
 The Bernoulli family in Proposition~\ref{prop:boundary-alpha-separation} proves that the extra condition cannot be discarded in general. More invariantly, because $g=d\theta^2$ there,
 \begin{equation}
@@ -1022,20 +1057,51 @@ Flat exponential or mixture coordinates do not contradict this statement: their 
 
 \subsection{Metric-compatible transport bound}
 
-Let $A=\nabla^{p,\LC}-\nabla^{\widetilde p,\LC}$. Up to the sign convention for $A$, the exact variation-of-connection identity is
+Let $A=\nabla^{g,\LC}-\nabla^{\widetilde g,\LC}$. Up to the sign convention for $A$, the exact variation-of-connection identity is
 \begin{equation}
 \begin{split}
-    P^{p,\LC}_{1\leftarrow0}
-    -P^{\widetilde p,\LC}_{1\leftarrow0}
+    P^{g,\LC}_{1\leftarrow0}
+    -P^{\widetilde g,\LC}_{1\leftarrow0}
     =-\int_0^1
-      P^{p,\LC}_{1\leftarrow t}\,
+      P^{g,\LC}_{1\leftarrow t}\,
       A_{\gamma(t)}\!\left(
         \dot\gamma(t),
-        P^{\widetilde p,\LC}_{t\leftarrow0}\,\cdot
+        P^{\widetilde g,\LC}_{t\leftarrow0}\,\cdot
       \right)\dd t.
 \end{split}
 \label{eq:lc-duhamel-appendix}
 \end{equation}
+
+The conditioning factors in a background Euclidean norm can be separated from the invariant transport statement. For two Riemannian metrics $g$ and $\widetilde g$, define the asymmetric mixed norm of $A=\nabla^{g,\LC}-\nabla^{\widetilde g,\LC}$ by
+\begin{equation}
+    \|A_x\|_{\widetilde g,\widetilde g\to g}
+    =\sup_{\substack{\|u\|_{\widetilde g_x}\le1\\
+                      \|v\|_{\widetilde g_x}\le1}}
+       \|A_x(u,v)\|_{g_x}.
+\end{equation}
+
+\begin{proposition}[Intrinsic mixed-norm transport comparison]\label{prop:mixed-norm-transport}
+Along every piecewise $C^1$ path $\gamma:[0,1]\to K$,
+\begin{equation}
+\begin{split}
+    \|P^{g,\LC}_{1\leftarrow0}
+      -P^{\widetilde g,\LC}_{1\leftarrow0}\|_{
+          \widetilde g_{\gamma(0)}\to g_{\gamma(1)}}
+    \le \int_0^1
+       \|A_{\gamma(t)}\|_{\widetilde g,\widetilde g\to g}
+       \|\dot\gamma(t)\|_{\widetilde g_{\gamma(t)}}\,\dd t.
+    \label{eq:mixed-norm-transport}
+\end{split}
+\end{equation}
+The reverse asymmetric estimate follows by interchanging $g$ and $\widetilde g$.
+\end{proposition}
+
+\begin{proof}
+Apply the Duhamel identity \eqref{eq:lc-duhamel-appendix} to an input $z$ with $\|z\|_{\widetilde g_{\gamma(0)}}\le1$. The inner $\widetilde g$-transport preserves its $\widetilde g$-norm, and the outer $g$-transport preserves the $g$-norm of the output of $A$. The definition of the mixed norm bounds the remaining contraction pointwise; integration and the supremum over $z$ give \eqref{eq:mixed-norm-transport}.
+\end{proof}
+
+Equation~\eqref{eq:mixed-norm-transport} is coordinate invariant and contains no separate condition-number multiplier. It does not remove conditioning: instability of raising indices or approaching rank loss is absorbed into the mixed norm of $A$. The Euclidean certificate below is therefore useful when a shared background chart is operationally meaningful, while the mixed-norm form is the cleaner geometric comparison.
+
 Metric compatibility and $\lambda I\preceq g\preceq B_1^2I$ imply
 \begin{equation}
     \|P^{\LC}_{t\leftarrow s}\|_{\op}

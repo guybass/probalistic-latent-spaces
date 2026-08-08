@@ -505,8 +505,8 @@ Stop expanding scope after the pilot. Intermediate transformer layers require Ja
 The repository now contains:
 
 - `src/predictive_geometry/field.py`: exact e/m transports, RK4 alpha-transport, the local defect scalar, and closed-form semantic alpha fitting;
-- `tests/test_semantic_field.py`: six tests covering exact flat transports, LC metric preservation, second-order local error, scale invariance, and alpha recovery;
-- `experiments/synthetic_semantic_alpha.py`: noisy synthetic recovery for e, LC, m, and an intermediate connection.
+- `tests/test_semantic_field.py`: tests covering exact flat transports, LC metric preservation, second-order local error, scale invariance, identifiability, and alpha recovery;
+- `experiments/synthetic_semantic_alpha.py`: deterministic synthetic recovery for e, LC, m, and an intermediate connection, with numerical-integration refinement reported only for the RK4 cases.
 
 These validate computation only. They are not evidence about language models.
 

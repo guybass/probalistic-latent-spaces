@@ -42,7 +42,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 
 ## Verification status
 
-- 45 automated CPU tests pass.
+- The complete automated CPU suite passes.
 - Saturated three-category curvature recovers \(K=1/4\), including a near-boundary stress test.
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.
@@ -63,10 +63,10 @@ The model-free geometry requires only NumPy. The Pythia experiment additionally 
 
 ## Current MSc research target
 
-The broad “probabilistic embeddings instead of vectors” thesis is already occupied by information geometry, manifold embeddings, and recent 2026 work on softmax geometry and representation holonomy.
+The broad “probabilistic embeddings instead of vectors” thesis is already occupied by information geometry, manifold embeddings, and recent work on softmax geometry and representation holonomy.
 
 The mathematical target is a vocabulary-independent stability theory:
 
-> Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general nonzero Amari alpha-connection additionally requires a stable raised third score moment. A tokenwise probability floor is sufficient but not necessary; affine softmax heads provide floor-free second-, third-, and fourth-score-moment formulas.
+> Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general nonzero Amari alpha-connection additionally requires a stable raised third score moment. This distinction is sharp: paired Bernoulli maps can converge in square-root C² while every fixed nonzero-alpha connection defect diverges. A tokenwise probability floor is sufficient but not necessary; affine softmax heads provide floor-free second-, third-, and fourth-score-moment formulas.
 
 The paired empirical question is which of exponential, Levi--Civita, mixture, or an intermediate alpha-connection predicts held-out semantic tangent fields and behavioral transfer. Ordinary vector reuse is the exponential arm, not a non-geometric baseline. A non-exponential winner must survive spectrum-matched controls, length-to-zero or integrated transport, multiple seeds, and behavioral evaluation.

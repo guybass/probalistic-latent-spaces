@@ -151,7 +151,43 @@ worsening conditioning, but they are not the theorem's uniform path constants.
 The pilot did not measure \(B_2,\delta_1,\delta_2\), or along-path extrema, so it
 does not instantiate either finite-scale certificate. The protocol and code now
 make those missing measurements explicit; at an affine head \(B_2\) is linked
-exactly to a fourth score moment.
+exactly to a fourth score moment. In fact,
+
+\[
+\|D^2\psi_x\|_{\mathrm{op}}
+=\frac12\sqrt{\sup_{\|u\|\le1}\mathbb E_{p(x)}[S_Y(u)^4]},
+\]
+
+so the fourth-moment envelope is not merely a directional heuristic. Numerical
+directions still give only lower bounds unless their optimization is certified.
+
+### Strengthened: the nonzero-alpha separation is pairwise
+
+The original Bernoulli example showed an unbounded nonzero-alpha coefficient
+under bounded square-root derivatives and \(g=1\). The paper now proves the
+stronger stability failure on one fixed compact chart: paired phase-shifted
+Bernoulli maps converge to one another in square-root \(C^2\), retain identical
+unit Fisher metrics, and have every fixed nonzero-alpha connection defect diverge.
+Thus alpha zero is unique only in the precisely scoped sense of stability from
+square-root \(C^2\) agreement plus a spectral floor; the paper does not claim that
+Levi--Civita is the only natural connection.
+
+### Added: an intrinsic transport comparison
+
+The coordinate Euclidean certificate remains useful for an operational hidden
+chart, but a second exact consequence of the Duhamel identity is now stated in
+mixed Fisher norms:
+
+\[
+\|P^{g,LC}-P^{\widetilde g,LC}\|_{\widetilde g_0\to g_1}
+\le \int
+\|\nabla^{g,LC}-\nabla^{\widetilde g,LC}\|_{
+\widetilde g,\widetilde g\to g}
+\|\dot\gamma\|_{\widetilde g}\,dt.
+\]
+
+This removes a separate chart-condition-number multiplier, not conditioning
+itself: rank sensitivity is absorbed by the mixed norm of the connection defect.
 
 ### Rejected overclaims
 
@@ -184,6 +220,13 @@ The primary implemented control now:
 
 This preserves every per-band leverage contribution, is invariant to arbitrary basis choice inside repeated eigenspaces, and randomizes orientation relative to decoder third moments. Fisher-Haar controls remain a secondary null.
 
+The critique that a fine relative-gap rule can collapse to mostly singleton
+sign flips is accepted. The executable now also supports coarser relative-log
+bands (one decade by default), preserves leverage at that declared resolution,
+and records the band rule and sizes. The protocol requires this as a sensitivity
+analysis; a conclusion that changes with the banding rule is reported as
+control-sensitive.
+
 ### Accepted: eight controls cannot produce significance
 
 With eight controls the smallest attainable plus-one tail rank is
@@ -212,7 +255,10 @@ The code now separates and enforces:
 - independent vocabulary-block recomputation, with a declared \(10^{-7}\) scaled curvature tolerance.
 
 The code also checks the square-root cubic identity and both branches of the
-finite-scale Levi--Civita stability certificate.
+finite-scale Levi--Civita stability certificate. Transport and field fitting now
+apply \(G^{-1}C(u,v,\cdot)\) directly and reuse the cached spectral factorization,
+rather than materializing a full cubic operator for every action. The direct and
+materialized paths are tested for equality.
 
 All thresholds are exposed by the real-model command and stored in new result payloads. No ridge is added to the primary geometry.
 
