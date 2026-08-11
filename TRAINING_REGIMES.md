@@ -376,3 +376,30 @@ Safe wording is:
 5. Only then study trainable alpha, holonomy penalties, intermediate layers, or longer predictive horizons.
 
 This sequence produces a useful negative result at every stopping point and requires no GPU.
+
+## 14. Cross-model connection distillation
+
+The R0--R5 study above asks whether a model can be trained to make its own
+semantic field parallel. A distinct compression study asks whether a frozen
+large teacher's predictive connection structure can be transferred to a
+smaller student.
+
+That experiment must not align raw hidden vectors. Teacher and student are
+instead pulled back to a shared low-dimensional intervention chart and the
+student matches a compact packet
+
+\[
+\mathcal P_T=(q_T,G_T,L_T,C_T).
+\]
+
+The packet anchors outputs, Fisher sensitivity, Levi--Civita connection, and the
+raised cubic information required by nonzero-alpha connections. Its training
+curriculum begins with ordinary output distillation, adds metric matching only
+after output convergence, then adds LC and cubic arms separately. Behavioral
+transfer at matched student NLL and compute remains the primary outcome.
+
+The complete formal construction, tensor losses, packet schema, CPU pilot,
+mathematical error-bound target, ablations, and falsification criteria are in
+[PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md).
+Nothing in that document should be described as implemented or empirically
+supported until the listed code, tests, and matched training runs exist.

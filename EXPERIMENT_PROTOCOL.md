@@ -1,6 +1,6 @@
 # CPU-Only Experiment Protocol
 
-Date: 2026-08-06
+Date: 2026-08-11
 Primary objects: ambient decoded intervention geometry and declared support-relative charts
 
 ## 1. Research question
@@ -11,7 +11,7 @@ For controlled semantic operations in an autoregressive language model, which ge
 2. Mixture connection: ordinary addition in probability coordinates.
 3. Fisher--Levi-Civita connection: metric-compatible parallel transport.
 
-The experiment also asks whether exact Fisher--LC sectional curvature of semantic planes changes during pretraining and predicts failures of flat composition.
+The experiment also asks whether exact Fisher--LC sectional curvature of semantic planes changes during pretraining and predicts failures of flat composition, and whether a compact teacher connection packet improves large-to-small model distillation beyond output and metric matching.
 
 The goal is not to demonstrate that the full categorical simplex is curved; that curvature is already known to be \(1/4\).
 
@@ -60,6 +60,24 @@ F(a,b)=p_\theta(\cdot\mid z(a,b)).
 
 Its Gaussian curvature belongs to this selected surface. It cannot automatically be called the sectional curvature of a larger empirical hidden manifold.
 
+### Object D: aligned teacher--student intervention chart
+
+For frozen teacher \(T\), student \(S\), and a shared low-dimensional coordinate
+\(z\in U\subset\mathbb R^m\), define
+
+\[
+F_T(c,z)=Q_Tp_T(\cdot\mid I_T(c,z)),
+\qquad
+F_S(c,z)=Q_Sp_S(\cdot\mid I_S(c,z)).
+\]
+
+The intervention coordinate and outcome space are shared; hidden dimensions and
+hidden coordinates need not align. The primary Pythia study uses a shared
+tokenizer and \(Q_T=Q_S=I\). Connection comparisons are valid only after this
+common-chart identification. See
+[PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
+for the complete packet and training contract.
+
 ## 3. Hypotheses
 
 ### H1: training effect
@@ -87,6 +105,13 @@ Curvature or integrated holonomy predicts composition error after controlling fo
 ### H5: reproducibility
 
 The sign and ranking of the effects replicate across training seeds and prompt templates.
+
+### H6: predictive connection distillation
+
+At matched student NLL, capacity, data order, and training compute, transferring
+the teacher's predictive \((G,L,C)\) packet improves held-out semantic transport
+and at least one behavioral transfer outcome beyond output-only and
+metric-only distillation.
 
 The null result is meaningful: exponential/logit transport may remain the best rule even when Fisher--LC curvature is nonzero.
 
@@ -484,7 +509,83 @@ For an independent holonomy check, integrate intrinsic LC transport around a sma
 
 Repeat with alternative interpolation charts through the same corners. Strong chart dependence is evidence that the result belongs to the interpolation choice rather than a robust natural-language structure.
 
-## 8. Sampling and statistics
+## 8. Experiment E: predictive connection distillation
+
+This experiment is prospective and not yet implemented. Its authoritative
+training and packet specification is
+[PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md).
+
+### 8.1 Primary setup
+
+- frozen Pythia-70M teacher and Pythia-14M student;
+- shared tokenizer and full outcome vocabulary;
+- two-dimensional soft-token intervention chart with frozen anchor tokens;
+- offline float64 teacher packets and float32 deterministic serialization;
+- adapter or final-block student training with the LM head frozen;
+- four seeds with identical initialization and example order across arms;
+- NLL-matched selection or a preregistered behavior--NLL Pareto frontier.
+
+At each accepted point, store
+
+\[
+\mathcal P_T=(q_T,G_T,L_T,C_T),
+\]
+
+where \(L_{ij,k}=\langle\partial_{ij}(2\sqrt q),
+\partial_k(2\sqrt q)\rangle\). The packet reconstructs every Amari
+connection through
+
+\[
+(\Gamma_T^{(\alpha)})^\ell{}_{ij}
+=(G_T^{-1})^{\ell k}
+\left((L_T)_{ij,k}-\frac\alpha2(C_T)_{ijk}\right).
+\]
+
+### 8.2 Matched arms
+
+| Arm | Student objective beyond data NLL |
+|---|---|
+| D0 | none |
+| D1 | output KD |
+| D2 | output KD plus Fisher metric matching |
+| D3 | D2 plus Levi--Civita connection matching |
+| D4 | D3 plus raised cubic matching |
+| D5 | D2 plus Fisher-orthogonally scrambled \(L,C\) targets replacing the teacher tensors |
+| D6 | D4 plus integrated transport matching; secondary only |
+
+For D5, transform all covariant indices with a nonidentity map \(R\) satisfying
+\(R^\top G_TR=G_T\), and hold the transformed targets fixed per packet and
+seed. This preserves symmetries and teacher-Fisher norms while breaking their
+semantic orientation. The primary contrasts are D2--D1, D3--D2, D4--D3, and
+D4--D5. D6 is run only
+after finite-difference packets and pointwise connection training pass their
+held-out numerical checks.
+
+### 8.3 Primary outcomes
+
+Report held-out NLL, output KL, metric defect, LC connection defect, raised cubic
+defect, integrated \(e\)/LC/\(m\)/fitted-\(\alpha\) transport errors, semantic-field
+commutator error, behavioral composition and intervention transfer, off-target
+KL, rank, conditioning, packet size, and compute.
+
+A positive result requires a connection arm to improve held-out transport and a
+preregistered behavioral outcome beyond D1/D2 at matched NLL, replicate in at
+least three of four seeds, survive rank and stencil sensitivity, and generalize
+to contexts and operations excluded from packet construction. Lower packet loss
+alone is not evidence of useful compression.
+
+### 8.4 Numerical gates
+
+- construct packets with central differences at \((h,h/2,h/4)\);
+- accept only a visible derivative-convergence plateau;
+- require teacher and student Fisher spectral floors on the declared chart;
+- treat rank loss and intervention shrinkage as failures, not successful loss
+  minimization;
+- regenerate and checksum a random 1% of teacher packets;
+- refine integrated transport independently of packet construction;
+- perform a same-model packet sanity check before teacher--student training.
+
+## 9. Sampling and statistics
 
 Model outputs are deterministic. Vocabulary entries and finite-difference grid points are not independent observations.
 
@@ -506,7 +607,7 @@ Primary comparisons:
 4. a sensitivity analysis that treats infeasibility as failure rather than dropping it;
 5. regression of composition error on curvature with entropy, the softmax-entropy cumulant-profile observables of [Viswanathan and Park](https://arxiv.org/abs/2510.04285), Fisher lengths, conditioning, and random-plane curvature as covariates.
 
-## 9. Falsification criteria
+## 10. Falsification criteria
 
 The proposed claim is unsupported if:
 
@@ -518,8 +619,12 @@ The proposed claim is unsupported if:
 - LC transport is usually infeasible or performs no better than exponential transport at the semantic scale;
 - the effect appears only in unnatural continuous interiors;
 - claimed semantic operations are not approximately commuting or metric preserving when the theorem requires those assumptions.
+- connection-distillation gains disappear after matching student NLL and compute;
+- metric matching explains all gains attributed to connection or cubic matching;
+- packet losses fall through chart shrinkage or Fisher rank loss;
+- distillation improvements fail on held-out chart constructions or semantic operations.
 
-## 10. Completed Pythia-14M pilot
+## 11. Completed Pythia-14M pilot
 
 This pilot used one model seed, three hand-written factorials, four checkpoints, and eight Fisher-Haar planes per base. It predates the spectrum-matched control and validates execution only. With eight controls its minimum plus-one one-sided tail rank is \(1/9\); neither that rank nor its standardized differences are calibrated tests for the hand-selected semantic planes.
 
@@ -554,7 +659,7 @@ Interpretation: the exact curvature is computable and differs strongly across tr
 
 Raw local result: `results/pythia_14m_pilot.json`.
 
-## 11. Commands
+## 12. Commands
 
 Run model-free tests:
 

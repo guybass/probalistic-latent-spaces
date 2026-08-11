@@ -1,6 +1,6 @@
 # Project overview
 
-> **Current status (6 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion.
+> **Current status (11 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion. Predictive connection distillation is now formally specified but not implemented.
 
 ## The 30-second version
 
@@ -200,7 +200,7 @@ Within a connection family fixed independently of the data and tested out of sam
 
 ### Verified computationally
 
-- 39 model-free CPU tests pass.
+- The complete model-free CPU test suite passes.
 - Exact categorical curvature recovers $1/4$.
 - LC transport preserves Fisher length numerically.
 - Exact $e/m$ transport, LC length preservation, first-order alpha recovery, and the expected decrease of integrated-target finite-edge bias are verified.
@@ -224,6 +224,9 @@ These are engineering results, not semantic evidence. The planes were not spectr
 - Does curvature/holonomy predict operation-order or composition failure?
 - Does the preferred connection develop reproducibly during pretraining?
 - Can a training objective deliberately create more transferable connection-linear representations?
+- Can compact predictive \((G,L,C)\) packets transfer a teacher's connection
+  structure and semantic transport to a smaller student beyond output-only and
+  metric-only distillation?
 
 ## How the hypothesis can lose
 
@@ -254,6 +257,14 @@ A meaningful positive result must improve behavior—not merely make the regular
 
 See [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for the complete design.
 
+The separate cross-model compression study avoids hidden-dimension alignment by
+placing teacher and student on the same low-dimensional intervention chart. It
+distills an output anchor, Fisher metric, first-kind Levi--Civita coefficient,
+and Amari--Chentsov tensor. See
+[PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
+for the packet schema, staged training curriculum, matched D0--D6 arms, theorem
+target, and stopping rules.
+
 ## Recommended reading order
 
 1. This overview.
@@ -261,4 +272,5 @@ See [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for the complete design.
 3. [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md) for the corrected CPU design.
 4. [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md) for the complete audit disposition.
 5. [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for prospective causal studies.
-6. The broad-hypothesis, proposal, proof-memorandum, and research-note files only as development history.
+6. [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md) for the prospective teacher--student compression study.
+7. The broad-hypothesis, proposal, proof-memorandum, and research-note files only as development history.

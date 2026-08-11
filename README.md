@@ -26,6 +26,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): current CPU protocol, spectrum-matched controls, numerical gates, finite-edge safeguards, falsification criteria, and the execution-only Pythia-14M pilot.
 - [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical and empirical audit finding.
 - [TRAINING_REGIMES.md](TRAINING_REGIMES.md): proposed matched training objectives; these remain future experiments rather than supported conclusions.
+- [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md): formal teacher--student connection-packet specification, CPU training curriculum, ablations, theorem target, and falsification criteria.
 - [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md), [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md), [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md), and [RESEARCH_NOTES.md](RESEARCH_NOTES.md): historical development notes, superseded wherever they conflict with the manuscript or protocol.
 
 ## Implemented code
@@ -70,3 +71,10 @@ The mathematical target is a vocabulary-independent stability theory:
 > Levi--Civita transport is controlled by square-root/Hellinger regularity, while a general nonzero Amari alpha-connection additionally requires a stable raised third score moment. This distinction is sharp: paired Bernoulli maps can converge in square-root C² while every fixed nonzero-alpha connection defect diverges. A tokenwise probability floor is sufficient but not necessary; affine softmax heads provide floor-free second-, third-, and fourth-score-moment formulas.
 
 The paired empirical question is which of exponential, Levi--Civita, mixture, or an intermediate alpha-connection predicts held-out semantic tangent fields and behavioral transfer. Ordinary vector reuse is the exponential arm, not a non-geometric baseline. A non-exponential winner must survive spectrum-matched controls, length-to-zero or integrated transport, multiple seeds, and behavioral evaluation.
+
+The cross-model extension asks whether a large teacher can transfer this local
+predictive structure to a smaller student through compact \((G,L,C)\) packets on a
+shared intervention chart. The packet reconstructs the full Amari connection
+family without aligning hidden dimensions. Output-only, metric-only,
+Levi--Civita, full-cubic, and connection-scrambled controls are compared at matched
+student NLL and compute; no distillation result has yet been run.
