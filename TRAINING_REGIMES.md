@@ -394,12 +394,16 @@ student matches a compact packet
 
 The packet anchors outputs, Fisher sensitivity, Levi--Civita connection, and the
 raised cubic information required by nonzero-alpha connections. Its training
-curriculum begins with ordinary output distillation, adds metric matching only
-after output convergence, then adds LC and cubic arms separately. Behavioral
-transfer at matched student NLL and compute remains the primary outcome.
+curriculum begins with ordinary output distillation, tests centered-logit and
+square-root Jacobian baselines, adds metric matching only after output
+convergence, then adds LC and cubic arms separately. A complementary arm audits
+the \(H^s\) square-root regularity required to convert chart-integrated
+forward KL into the manuscript's LC transport bound. Behavioral transfer at
+matched student NLL and compute remains the primary outcome.
 
 The complete formal construction, tensor losses, packet schema, CPU pilot,
-mathematical error-bound target, ablations, and falsification criteria are in
+proven risk-to-LC bridge, packet error bound, remaining transport target,
+ablations, and falsification criteria are in
 [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md).
 Nothing in that document should be described as implemented or empirically
 supported until the listed code, tests, and matched training runs exist.

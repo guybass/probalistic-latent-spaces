@@ -14,8 +14,10 @@ The proposed experiment asks a stronger question:
 
 > At matched student capacity, language-model loss, and training compute, does
 > transferring a compact local Fisher--Amari connection packet preserve the
-> teacher's held-out semantic transport and behavior better than output-only
-> distillation?
+> teacher's held-out semantic transport and behavior better than output-only,
+> generic derivative, square-root Jacobian, and metric-only distillation; and
+> when does chart KL plus audited square-root Sobolev regularity already suffice
+> for Levi--Civita transport agreement?
 
 The intended claim is conditional and empirical. The project does not assume
 that a student can reproduce every teacher capability, that one connection is
@@ -80,6 +82,13 @@ The central chart point need not be \(z=0\), but it must be recorded.
 All connection differences below are evaluated after this common-chart
 identification. A difference of Christoffel coefficients on unrelated hidden
 coordinates would not be meaningful.
+
+Equivalently, the teacher and student parameter manifolds used in this
+experiment are two copies of \(U\), identified by
+\(\Phi=\operatorname{id}_U\). This does not assert that \(F_T=F_S\), that their
+full hidden spaces align, or that their predictive images are already
+diffeomorphic. The shared tokenizer identifies the outcome coordinates; the
+frozen chart construction identifies the intervention coordinates.
 
 ## 3. Predictive connection packet
 
@@ -172,6 +181,44 @@ Every packet shard must store:
 Packets that fail the rank, derivative-convergence, or finite-value gates are
 retained as failures in the audit log but excluded from connection training.
 
+### 3.3 Two complementary routes to transport agreement
+
+The project tests two routes that should not be conflated.
+
+The **risk--regularity route** starts from the chart-integrated forward
+distillation divergence
+
+\[
+\mathcal K_{T,S}
+=\int_U
+D_{KL}\bigl(q_T(z)\Vert q_S(z)\bigr)\,d\mu(z).
+\]
+
+The boundary-robust theorem in [paper/main.tex](paper/main.tex) states that if
+\(\psi_T,\psi_S\) have a common uniform \(H^s(U;\ell_2)\) envelope with
+\(s>2+m/2\), the sampling measure has a density bounded below, both Fisher
+metrics have a common spectral floor, and path lengths are bounded, then
+
+\[
+\|P_{\gamma,T}^{LC}-P_{\gamma,S}^{LC}\|_{\mathrm{op}}
+\le C\,\mathcal K_{T,S}^{(s-r)/(2s)},
+\qquad 2+\frac m2<r<s.
+\]
+
+The constant has no explicit vocabulary-size or minimum-token-probability
+factor, but still depends on the measured Sobolev envelope, Fisher spectral
+floor, chart, sampling density, and path-length bound. Empirical KL and
+finite-grid derivative penalties do not by themselves certify these
+hypotheses. Nonzero-\(\alpha\) transport additionally requires control of the
+raised cubic/third-score moment.
+
+The **packet route** directly matches \(G,L,C\) at sampled chart points. It
+provides finite-dimensional local connection control and covers the full
+Amari family, but sparse packet agreement alone does not exclude oscillations
+between samples. The combined experiment therefore treats Sobolev regularity
+as an audited anti-oscillation condition and packet matching as the direct
+connection-transfer intervention.
+
 ## 4. Distillation objectives
 
 The complete student objective is
@@ -180,29 +227,134 @@ The complete student objective is
 \mathcal L
 =\mathcal L_{\mathrm{data}}
 +\lambda_{KD}\mathcal L_{KD}
++\lambda_{Jz}\mathcal L_{Jz}
++\lambda_{J\psi}\mathcal L_{J\psi}
++\lambda_H\mathcal R_{H^{s_*}}
 +\lambda_g\mathcal L_g
 +\lambda_{LC}\mathcal L_{LC}
 +\lambda_C\mathcal L_C
 +\lambda_{P}\mathcal L_P.
 \]
 
-The teacher is frozen and every teacher target is stop-gradient.
+The teacher is frozen and every teacher target is stop-gradient. The displayed
+formula is a menu: the matched arms below set most coefficients to zero rather
+than activating every term simultaneously.
 
 ### 4.1 Output anchor
 
-Use ordinary temperature-scaled output distillation,
+Use ordinary temperature-scaled output distillation on natural data and an
+untempered forward-KL anchor on the frozen chart measure \(\mu\):
 
 \[
+\begin{aligned}
 \mathcal L_{KD}
-=\tau^2\,
-D_{KL}\bigl(\operatorname{sg}[q_T^{(\tau)}]\Vert
-q_S^{(\tau)}\bigr),
+={}&
+\tau^2\mathbb E_{c\sim\mathcal D}
+D_{KL}\bigl(
+\operatorname{sg}[p_T^{(\tau)}(\cdot\mid c)]
+\Vert p_S^{(\tau)}(\cdot\mid c)
+\bigr)\\
+&+\lambda_{\mathrm{chart}}
+\mathbb E_{(c,z)\sim\mu}
+D_{KL}\bigl(
+\operatorname{sg}[q_T(c,z)]
+\Vert q_S(c,z)
+\bigr).
+\end{aligned}
 \]
 
-alongside ground-truth language-model loss. Geometry alone does not determine
-the global predictive function, so output anchoring is mandatory.
+Retain ground-truth language-model loss. The untempered chart term, not a
+temperature-softened substitute, estimates the \(\mathcal K_{T,S}\) used by
+the risk-to-transport theorem. Geometry alone does not determine the global
+predictive function, so output anchoring is mandatory.
 
-### 4.2 Fisher metric loss
+This chart loss is an empirical estimate of \(\mathcal K_{T,S}\), not the
+population integral automatically. The chart sampler, density, and quadrature
+or Monte Carlo error must be reported. Reverse-KL arms may be studied as
+language-model distillation baselines, but the risk-to-transport theorem is
+stated for the forward order above.
+
+### 4.2 Derivative-matching controls
+
+Let \(\ell_M(z)\in\mathbb R^V\) be the model logits and remove the softmax
+gauge by
+
+\[
+\bar\ell_M
+=\ell_M-\frac{1}{V}\boldsymbol 1\boldsymbol 1^\top\ell_M.
+\]
+
+The conventional derivative-distillation control is
+
+\[
+\mathcal L_{Jz}
+=\sum_{i=1}^m
+\|\partial_i\bar\ell_S-\partial_i\bar\ell_T\|_2^2.
+\]
+
+This control is defined only in the shared-tokenizer primary experiment.
+Cross-tokenizer studies require a separately justified common log-odds
+coordinate system and may not silently compare raw logits.
+
+The square-root-output Jacobian loss is
+
+\[
+\mathcal L_{J\psi}
+=\sum_{i=1}^m
+\|\partial_i\psi_S-\partial_i\psi_T\|_{\ell_2}^2.
+\]
+
+\(\mathcal L_{J\psi}\) is stronger than Fisher metric matching: it preserves
+the orientation of predictive tangents in the shared square-root outcome
+coordinates, whereas \(G=J_\psi^\top J_\psi\) retains only their intrinsic
+Gram matrix. The two losses therefore require separate arms. Small empirical
+Jacobian loss is an integrated derivative discrepancy, not automatically
+uniform \(C^1\) agreement.
+
+### 4.3 Sobolev regularity and roughness
+
+Let
+
+\[
+s_*=\min\left\{k\in\mathbb N:k>2+\frac m2\right\};
+\]
+
+thus \(s_*=3\) for a one-dimensional chart and \(s_*=4\) for a
+two-dimensional chart. On a regular compact domain, the theorem-matched
+integer Sobolev audit is
+
+\[
+\mathcal R_{H^{s_*}}(\psi_S)
+=\sum_{|\beta|\le s_*}
+\int_U\|\partial^\beta\psi_S(z)\|_{\ell_2}^2\,dz.
+\]
+
+The frozen teacher must pass the same audit, and the reported envelope is
+
+\[
+B_{\mathrm{audit}}
+=\|\psi_T\|_{H^{s_*}}+\|\psi_S\|_{H^{s_*}}.
+\]
+
+Freeze an admissible \(B_{\max}\) before confirmation runs. A regularized arm
+may be interpreted through the theorem only if
+\(B_{\mathrm{audit}}\le B_{\max}\) and the remaining density, rank, and
+path-length gates pass.
+
+A second-derivative roughness penalty
+
+\[
+\mathcal R_2
+=\mathbb E_z\|D^2\psi_S(z)\|_{\mathrm{HS}}^2
+\]
+
+is cheaper and may be used as a heuristic crossed arm, but it is not the
+\(H^{s_*}\) hypothesis when \(s_*>2\). Finite-grid estimates of either
+quantity are numerical audits rather than proofs of a uniform bound. A
+band-limited chart basis may convert finite coefficient control into a
+certified bound, but its bandwidth must be frozen and sensitivity tested.
+
+### 4.4 Fisher metric loss
 
 Measure relative metric distortion in teacher-Fisher units:
 
@@ -223,7 +375,7 @@ The primary metric gate requires
 Rank failures are outcomes; the primary analysis does not silently replace the
 geometry by a ridge-deformed metric.
 
-### 4.3 Levi--Civita connection loss
+### 4.5 Levi--Civita connection loss
 
 On the common chart, let
 
@@ -242,7 +394,7 @@ The difference is a \((1,2)\)-tensor. Its teacher-Fisher squared norm is
 This loss is invariant under a simultaneous reparameterization of the shared
 chart. Matching unaligned raw Christoffel arrays is forbidden.
 
-### 4.4 Raised cubic loss
+### 4.6 Raised cubic loss
 
 Define the raised cubic operator
 
@@ -263,7 +415,7 @@ Training with \((G,L,C)\) is preferred to choosing one \(\alpha\) in advance,
 because it transfers the full canonical family and allows connection selection
 to remain a held-out empirical question.
 
-### 4.5 Integrated transport loss
+### 4.7 Integrated transport loss
 
 For a preregistered path \(\gamma:[0,1]\to U\) and chart tangent probe \(u\),
 
@@ -349,6 +501,8 @@ Before packet generation, freeze:
 - teacher revision, student architecture, and trainable parameter subset;
 - shared tokenizer or fixed outcome coarsening;
 - chart construction and anchor tokens;
+- chart measure \(\mu\), density audit, Sobolev order \(s_*\), and
+  confirmation threshold \(B_{\max}\);
 - contexts, semantic operations, paths, and train/validation/test split;
 - finite-difference step grid and numerical gates;
 - optimizer, token budget, lambda grid, and random seeds;
@@ -360,8 +514,10 @@ Before packet generation, freeze:
 2. Construct \((q_T,G_T,L_T,C_T)\) in float64.
 3. Repeat at \((h,h/2,h/4)\).
 4. Reject nonconvergent or rank-deficient packets according to the frozen gates.
-5. Serialize accepted packets in float32 and retain float64 audit summaries.
-6. Regenerate a random 1% sample and require checksum and tolerance agreement.
+5. Audit the teacher \(H^{s_*}\) norm or declare the lower-order roughness
+   quantity to be heuristic only.
+6. Serialize accepted packets in float32 and retain float64 audit summaries.
+7. Regenerate a random 1% sample and require checksum and tolerance agreement.
 
 ### Phase 2: output-distillation warm start
 
@@ -374,26 +530,36 @@ Train the student with
 until validation NLL and teacher--student KL reach a preregistered plateau. Do
 not use geometric losses to rescue a student that cannot learn the output task.
 
-### Phase 3: metric curriculum
+### Phase 3: derivative controls and regularity audit
+
+Run the centered-logit Jacobian, square-root Jacobian, and metric arms
+separately. This determines whether a later connection gain exceeds generic
+derivative distillation and whether full square-root tangent orientation adds
+information beyond the intrinsic metric. Cross the output-only and metric arms
+with the preregistered regularity condition. Report \(B_{\mathrm{audit}}\);
+do not infer a theorem hypothesis merely because a roughness penalty was
+present in the objective.
+
+### Phase 4: metric curriculum
 
 Ramp \(\lambda_g\) linearly from zero. Track the student metric floor,
 condition number, and held-out metric defect. If the student lowers the loss by
 losing rank or shrinking intervention strength, stop the run and count it as a
 failure.
 
-### Phase 4: connection curriculum
+### Phase 5: connection curriculum
 
 After metric stability, activate \(\mathcal L_{LC}\). Then add
 \(\mathcal L_C\) in a separate arm. The fixed-arm order prevents cubic
 instability from being misattributed to LC geometry.
 
-### Phase 5: optional path refinement
+### Phase 6: optional path refinement
 
 Only after pointwise connection defects decrease on held-out packets, add
 \(\mathcal L_P\) on short preregistered paths. Compare direct integrated
 transport with the pointwise packet surrogate and refine the ODE step size.
 
-### Phase 6: frozen evaluation
+### Phase 7: frozen evaluation
 
 Select checkpoints by validation NLL plus the declared Pareto rule, not by
 test geometric loss. Evaluate test behavior, output KL, metric defect,
@@ -408,11 +574,19 @@ the same examples in the same order.
 |---|---|---|
 | D0 | none | student-only baseline |
 | D1 | output KD | standard teacher compression baseline |
+| Jz | output KD + centered-logit Jacobian | does generic derivative matching explain the gain? |
+| Jpsi | output KD + square-root Jacobian | does predictive-tangent orientation add value, and does square-root weighting beat logits? |
 | D2 | output KD + \(G\) | does local Fisher sensitivity add value? |
 | D3 | output KD + \((G,L)\) | does LC connection transfer add value beyond metric matching? |
 | D4 | output KD + \((G,L,C)\) | does the full Amari family add value beyond LC? |
 | D5 | output KD + \(G\) + Fisher-orthogonally scrambled \(L,C\) targets | does the correctly oriented teacher connection matter beyond loss scale? |
 | D6 | D4 + integrated path loss | does explicit transport improve over pointwise packet matching? |
+
+Use **Jpsi** as the machine-readable arm name while writing it as
+\(J_\psi\) in equations. Cross D1 and D2 with either the full
+\(H^{s_*}\) regularizer and audit or the explicitly heuristic
+\(\mathcal R_2\) condition. These regularity variants are labeled **D1-H**, **D2-H**,
+**D1-R2**, and **D2-R2**; they are not silently pooled with their parent arms.
 
 For D5, sample a nonidentity linear map \(R\) from the orthogonal group of
 \(G_T\), transform every covariant index of \(L_T\) and \(C_T\) by \(R\), and
@@ -426,11 +600,22 @@ need not be realizable as a coherent local jet and are not the primary control.
 The primary contrasts are
 
 \[
-D2-D1,\qquad D3-D2,\qquad D4-D3,\qquad D4-D5.
+J_\psi-J_z,\qquad
+D2-D1,\qquad
+D3-D2,\qquad
+D3-J_\psi,\qquad
+D4-D3,\qquad
+D4-D5.
 \]
 
-D6 is secondary because it introduces additional solver and path-design
-choices.
+The \(J_\psi-J_z\) contrast tests square-root predictive coordinates against
+an established derivative-matching baseline. \(D3-D2\) and
+\(D3-J_\psi\) jointly test whether connection information helps beyond both
+an intrinsic first-order target and the stronger oriented predictive
+Jacobian. The **-H** and **-R2** contrasts test anti-oscillation regularization;
+only the former can be compared to the theorem assumptions after its measured
+audit passes. D6 is secondary because it introduces additional solver and
+path-design choices.
 
 Hyperparameters are selected with either an NLL-matched constraint or a full
 behavior--NLL Pareto frontier. Every arm receives the same number of pilot
@@ -438,20 +623,30 @@ trials and the same lambda grid size.
 
 ## 8. CPU-first pilot
 
-The first cross-model pilot is deliberately small:
+The first implementation target is a synthetic saturated-softmax
+teacher--student pair with a known predictive manifold. It must recover the
+analytic packet, demonstrate the KL-only oscillatory escape, and verify that
+the derivative, Sobolev, packet, and integrated-transport estimators converge
+before any language-model result is interpreted.
+
+The first language-model pilot is deliberately small:
 
 - teacher: frozen Pythia-70M;
 - student: Pythia-14M;
 - shared Pythia tokenizer and full output vocabulary;
-- two-dimensional soft-token chart from fixed anchor tokens;
+- one-dimensional charts for the initial \(H^3\) regularity audit and
+  two-dimensional soft-token charts for the packet experiment;
 - 5,000 discovery contexts and 1,000/2,000 validation/test contexts;
 - four training seeds;
 - train only adapters or the final transformer block; freeze the LM head;
 - sequence length at most 64;
 - nine teacher stencil evaluations per context for a complete two-dimensional
-  central-difference jet;
+  second-order central-difference jet; the \(H^4\) audit uses a separately
+  preregistered wider stencil or a frozen band-limited basis;
 - teacher inference and packet generation performed once on CPU;
-- D0--D4 in the primary pilot; D5--D6 only after numerical validation.
+- stage A: D0, D1, Jz, Jpsi, and D2;
+- stage B: D3 and D4 only after stage A passes its numerical gates;
+- D5--D6 and the two-dimensional \(H^4\) arm only after stage B.
 
 If Pythia-70M packet generation is too slow, first validate the pipeline with a
 Pythia-14M teacher and a custom 2--4-layer student. That engineering run cannot
@@ -476,6 +671,9 @@ result.
 ### 9.2 Geometric outcomes
 
 - relative Fisher metric defect;
+- centered-logit and square-root Jacobian defects;
+- measured teacher/student \(H^{s_*}\) envelopes and second-order roughness,
+  reported separately;
 - LC connection-tensor defect;
 - raised cubic defect;
 - integrated \(e\), LC, \(m\), and fitted-\(\alpha\) transport defects;
@@ -499,7 +697,47 @@ When teacher and student fields are estimated separately, additionally report
 their base-point field mismatch. Transport agreement must not receive credit
 for starting from different semantic operations.
 
-### 9.4 Statistical units
+### 9.4 Fixed-representation sufficiency diagnostic
+
+When the student representation has a verified noninjective predictive map
+\(F_S\), let \(Z_S\) be the operation's predictive tangent effect and define
+
+\[
+\overline Z_S(p)
+=\mathbb E[Z_S\mid F_S=p].
+\]
+
+For a teacher conditional-mean field \(Y_{T\to S}\) transferred into the same
+student predictive tangent bundle, conditional expectation gives the exact
+orthogonal decomposition
+
+\[
+\begin{aligned}
+\mathbb E\|Z_S-Y_{T\to S}(F_S)\|_{g_S}^2
+={}&
+\underbrace{\mathbb E\operatorname{Var}_{g_S}(Z_S\mid F_S)}
+_{\text{fixed-representation predictive insufficiency}}\\
+&+
+\underbrace{\mathbb E\|\overline Z_S-Y_{T\to S}\|_{g_S}^2}
+_{\text{cross-model field mismatch}}.
+\end{aligned}
+\]
+
+Only the second term is directly a teacher--student alignment error. The first
+term says that no field depending only on this fixed predictive representation
+can encode the operation exactly. It is not a universal statement about the
+student architecture: training may change \(F_S\). At an injective final head
+the first term vanishes identically and must not be reported as a capacity
+diagnostic.
+
+For a declared coarsening \(\bar F_S=QF_S\), recompute the effect
+\(d\bar F_S X\), metric, conditional mean, and both terms on the coarsened
+image. Conditioning the original tangent field on coarse labels is not this
+theorem. Because most primary final-head charts are injective, this
+decomposition is a secondary failure-localization study at a verified
+noninjective earlier map or complete coarsening.
+
+### 9.5 Statistical units
 
 The independent units are training seed, prompt template, lexical family, and
 semantic operation. Token probabilities and finite-difference stencil points
@@ -510,35 +748,73 @@ bootstrap intervals over seeds and prompt families.
 
 A positive connection-distillation result requires all of:
 
-1. D3 or D4 improves held-out transport over D1 and D2;
+1. D3 or D4 improves held-out transport over D1, Jz, Jpsi, and D2;
 2. it improves a preregistered behavioral transfer outcome;
 3. validation NLL is matched or the arm lies on a better Pareto frontier;
 4. the result replicates across at least three of four seeds;
 5. the gain survives finite-difference, rank, and ODE-step sensitivity;
 6. it beats the Fisher-orthogonally scrambled control D5 when that arm is run;
 7. it transfers to contexts and semantic operations excluded from packet
-   generation.
+   generation;
+8. any risk-to-transport interpretation reports stable measured
+   \(H^{s_*}\) envelopes, chart-sampling error, and Fisher spectral floors.
 
 The hypothesis is unsupported when:
 
 - packet losses fall but behavior does not improve;
 - D2 explains all gains from D3/D4;
+- Jz or Jpsi explains all behavioral gains from the connection arms;
+- a roughness penalty is presented as satisfying the Sobolev theorem without a
+  measured \(H^{s_*}\) audit;
 - improvements disappear after matching NLL or compute;
 - the student exploits metric rank loss, intervention shrinkage, or chart scale;
 - the preferred connection is inconsistent across seeds or operations;
 - connection alignment adds nothing beyond output KL and ordinary relational
   distillation;
-- results exist only on the packet-generation chart and fail on held-out chart
-  constructions.
+- results exist only at packet points or on the packet-generation chart and
+  fail between-sample or held-out chart constructions.
 
-These negative outcomes remain useful: they distinguish capacity limits,
-first-order sensitivity transfer, connection-specific information, and chart
-overfitting.
+These negative outcomes remain useful: they distinguish fixed-representation
+predictive insufficiency, generic derivative transfer, intrinsic metric
+transfer, connection-specific information, and chart overfitting.
 
-## 11. Mathematical theorem target
+## 11. Mathematical guarantees and remaining target
 
-This section is a target for proof, not a theorem currently claimed by the
-project.
+### 11.1 Proven risk-to-LC bridge
+
+The manuscript already proves the following implication. Let \(U\) be a
+regular compact \(m\)-dimensional chart, let \(\mu\) have density bounded below,
+and suppose
+
+\[
+\psi_T,\psi_S\in H^s(U;\ell_2^V),
+\qquad
+\|\psi_T\|_{H^s}+\|\psi_S\|_{H^s}\le B,
+\qquad
+s>2+\frac m2,
+\]
+
+with \(G_T,G_S\succeq\lambda I\). For bounded chart-path length and every
+\(r\) satisfying \(2+m/2<r<s\),
+
+\[
+\|P_{\gamma,T}^{LC}-P_{\gamma,S}^{LC}\|_{\mathrm{op}}
+\le
+C\,
+\mathcal K_{T,S}^{(s-r)/(2s)}.
+\]
+
+The constant is independent of vocabulary size and a minimum token
+probability, but depends on \(B,\lambda^{-1}\), the chart, sampling-density
+floor, and path-length envelope. The experiment can compare this rate with
+observations only after auditing those quantities. The theorem concerns LC;
+it does not replace the raised-cubic requirement for nonzero \(\alpha\).
+
+### 11.2 Exact packet-to-connection bound
+
+Fix compatible matrix and tensor norms for which index contraction is
+submultiplicative. The following estimate is algebraic, not an unproved
+empirical claim.
 
 Assume on a common compact chart that teacher and student metrics satisfy
 
@@ -571,7 +847,11 @@ estimate
 \]
 
 No smallness assumption on \(\varepsilon_g\) is needed beyond the common
-metric floor. The remaining theorem target is to combine this estimate with
+metric floor.
+
+### 11.3 Packet-to-transport target
+
+The remaining theorem target is to combine the packet estimate with
 finite-difference and packet-quantization errors and the exact
 variation-of-connection identity. For paths of length at most \(L_0\), the
 desired consequence is
@@ -600,15 +880,22 @@ agreement from output KL alone.
 
 The surrounding ideas are established:
 
+- [Sobolev Training for Neural Networks](https://arxiv.org/abs/1706.04859)
+  incorporates target derivatives into function approximation and explicitly
+  includes network compression/distillation as an application.
 - [Knowledge Transfer with Jacobian Matching](https://arxiv.org/abs/1803.00443)
   transfers output derivatives and relates Jacobian matching to noisy-input
   distillation.
+- [FitNets](https://arxiv.org/abs/1412.6550) transfers intermediate teacher
+  representations through learned hints.
 - [Relational Knowledge Distillation](https://openaccess.thecvf.com/content_CVPR_2019/html/Park_Relational_Knowledge_Distillation_CVPR_2019_paper.html)
   transfers distances and angles between examples rather than matching only
   individual outputs.
 - [MiniLM](https://arxiv.org/abs/2002.10957) and
   [MiniLMv2](https://arxiv.org/abs/2012.15828) transfer internal attention
   relations across differently sized Transformers.
+- [MiniLLM](https://arxiv.org/abs/2306.08543) studies reverse-KL distillation
+  for generative language models and is a required divergence-choice baseline.
 - [Geometric Knowledge Distillation](https://openreview.net/forum?id=7WGNT3MHyBm)
   aligns neural heat kernels for graph-topology compression.
 
@@ -616,8 +903,11 @@ A focused literature search did not identify a method that jointly distills an
 autoregressive model's predictive Fisher pullback, Levi--Civita coefficient,
 Amari--Chentsov tensor, and connection-dependent semantic transport. This is a
 research-position statement, not proof that no such paper exists. The work must
-be described as a specific synthesis and tested against Jacobian, relational,
-and Transformer distillation baselines.
+be described as a specific synthesis and tested against Sobolev/Jacobian,
+relational, hidden-representation, and Transformer distillation baselines. The
+conditional-variance decomposition is presented as a fixed-representation
+failure-localization tool, not as a claim that prior distillation work lacks
+all notions of student capacity.
 
 ## 13. Implementation roadmap
 
@@ -627,13 +917,15 @@ schema exist.
 1. `src/predictive_geometry/distillation.py`
    - shared-chart packet dataclass and schema validation;
    - central-difference jet assembly;
+   - centered-logit and square-root Jacobian controls;
+   - integer \(H^{s_*}\) audit and lower-order roughness diagnostic;
    - metric, first-kind LC, cubic, and raised-connection losses.
 2. `experiments/build_teacher_packets.py`
    - batched CPU teacher inference;
    - refinement and rank gates;
    - sharded deterministic packet serialization.
 3. `experiments/train_connection_student.py`
-   - D0--D6 matched arms;
+   - D0--D6, Jz, Jpsi, and crossed regularity arms;
    - curriculum scheduling and NLL/Pareto selection;
    - resumable CPU checkpoints.
 4. `experiments/evaluate_connection_student.py`
@@ -643,6 +935,10 @@ schema exist.
    - coordinate-change covariance;
    - finite-difference convergence;
    - packet serialization and quantization error;
+   - logit-gauge invariance and the strict distinction between Jacobian and
+     Gram-metric matching;
+   - analytic Sobolev-order and oscillatory-counterexample fixtures;
+   - conditional-variance decomposition on a noninjective map;
    - zero loss for identical teacher/student maps;
    - rejection of rank-deficient and mismatched-chart packets.
 
@@ -652,11 +948,14 @@ schema exist.
 2. Implement deterministic packet generation and schema validation.
 3. Run a same-model self-distillation sanity check; all packet defects should be
    zero up to numerical error.
-4. Run Pythia-14M to tiny-student engineering validation.
-5. Freeze the primary Pythia-70M to Pythia-14M experiment.
-6. Compare D0--D4 before adding path loss or learned alpha.
-7. Continue only if connection alignment improves held-out behavior beyond
-   output and metric baselines.
+4. Verify the risk--regularity rate and KL-only oscillatory escape on a
+   synthetic saturated-softmax teacher--student pair.
+5. Run Pythia-14M to tiny-student engineering validation.
+6. Freeze the primary Pythia-70M to Pythia-14M experiment.
+7. Compare D0, D1, Jz, Jpsi, and D2 before activating connection losses.
+8. Compare D3/D4 against both derivative controls, then add D5/D6.
+9. Continue only if connection alignment improves held-out behavior beyond
+   output, generic derivative, square-root Jacobian, and metric baselines.
 
 This ordering keeps the project CPU-first and guarantees an interpretable
 stopping point even if connection distillation does not improve compression.

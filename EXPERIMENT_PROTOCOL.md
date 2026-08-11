@@ -110,8 +110,8 @@ The sign and ranking of the effects replicate across training seeds and prompt t
 
 At matched student NLL, capacity, data order, and training compute, transferring
 the teacher's predictive \((G,L,C)\) packet improves held-out semantic transport
-and at least one behavioral transfer outcome beyond output-only and
-metric-only distillation.
+and at least one behavioral transfer outcome beyond output-only,
+centered-logit Jacobian, square-root Jacobian, and metric-only distillation.
 
 The null result is meaningful: exponential/logit transport may remain the best rule even when Fisher--LC curvature is nonzero.
 
@@ -517,9 +517,14 @@ training and packet specification is
 
 ### 8.1 Primary setup
 
+- first validate all estimators on a synthetic saturated-softmax
+  teacher--student pair with analytic geometry and an oscillatory KL-only
+  counterexample;
 - frozen Pythia-70M teacher and Pythia-14M student;
 - shared tokenizer and full outcome vocabulary;
-- two-dimensional soft-token intervention chart with frozen anchor tokens;
+- one-dimensional charts for the initial \(H^3\) audit and two-dimensional
+  soft-token charts for packet transfer, all with frozen anchor tokens;
+- frozen chart-sampling measure with a reported density and quadrature audit;
 - offline float64 teacher packets and float32 deterministic serialization;
 - adapter or final-block student training with the LM head frozen;
 - four seeds with identical initialization and example order across arms;
@@ -547,6 +552,8 @@ connection through
 |---|---|
 | D0 | none |
 | D1 | output KD |
+| Jz | D1 plus centered-logit Jacobian matching |
+| Jpsi | D1 plus square-root-output Jacobian matching |
 | D2 | output KD plus Fisher metric matching |
 | D3 | D2 plus Levi--Civita connection matching |
 | D4 | D3 plus raised cubic matching |
@@ -557,28 +564,38 @@ For D5, transform all covariant indices with a nonidentity map \(R\) satisfying
 \(R^\top G_TR=G_T\), and hold the transformed targets fixed per packet and
 seed. This preserves symmetries and teacher-Fisher norms while breaking their
 semantic orientation. The primary contrasts are D2--D1, D3--D2, D4--D3, and
-D4--D5. D6 is run only
+D4--D5, with the additional mandatory comparisons Jpsi--Jz and D3--Jpsi.
+The Jacobian arms separate generic derivative distillation, oriented
+square-root tangent matching, and intrinsic Gram-metric matching. D6 is run only
 after finite-difference packets and pointwise connection training pass their
 held-out numerical checks.
 
 ### 8.3 Primary outcomes
 
-Report held-out NLL, output KL, metric defect, LC connection defect, raised cubic
+Report held-out NLL, output KL, centered-logit and square-root Jacobian defects,
+metric defect, measured \(H^{s_*}\) envelope, LC connection defect, raised cubic
 defect, integrated \(e\)/LC/\(m\)/fitted-\(\alpha\) transport errors, semantic-field
 commutator error, behavioral composition and intervention transfer, off-target
-KL, rank, conditioning, packet size, and compute.
+KL, rank, conditioning, packet size, and compute. On a verified noninjective
+map or complete declared coarsening only, additionally report the
+fixed-representation conditional-variance obstruction and cross-model
+conditional-mean-field mismatch in the student metric.
 
 A positive result requires a connection arm to improve held-out transport and a
-preregistered behavioral outcome beyond D1/D2 at matched NLL, replicate in at
-least three of four seeds, survive rank and stencil sensitivity, and generalize
-to contexts and operations excluded from packet construction. Lower packet loss
-alone is not evidence of useful compression.
+preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched NLL, replicate
+in at least three of four seeds, survive rank and stencil sensitivity, and
+generalize to contexts and operations excluded from packet construction. Lower
+packet loss alone is not evidence of useful compression.
 
 ### 8.4 Numerical gates
 
 - construct packets with central differences at \((h,h/2,h/4)\);
 - accept only a visible derivative-convergence plateau;
 - require teacher and student Fisher spectral floors on the declared chart;
+- audit the theorem-matched integer Sobolev order
+  \(s_*=\min\{k\in\mathbb N:k>2+m/2\}\); label an \(H^2\)-style roughness
+  penalty as heuristic rather than theorem sufficient;
+- report chart integration/sampling error for the forward-KL quantity;
 - treat rank loss and intervention shrinkage as failures, not successful loss
   minimization;
 - regenerate and checksum a random 1% of teacher packets;
@@ -621,6 +638,10 @@ The proposed claim is unsupported if:
 - claimed semantic operations are not approximately commuting or metric preserving when the theorem requires those assumptions.
 - connection-distillation gains disappear after matching student NLL and compute;
 - metric matching explains all gains attributed to connection or cubic matching;
+- centered-logit or square-root Jacobian matching explains all behavioral gains
+  attributed to connection transfer;
+- a second-order roughness penalty is treated as the \(H^{s_*}\) theorem
+  hypothesis without the required higher-order audit;
 - packet losses fall through chart shrinkage or Fisher rank loss;
 - distillation improvements fail on held-out chart constructions or semantic operations.
 

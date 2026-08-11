@@ -26,7 +26,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): current CPU protocol, spectrum-matched controls, numerical gates, finite-edge safeguards, falsification criteria, and the execution-only Pythia-14M pilot.
 - [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical and empirical audit finding.
 - [TRAINING_REGIMES.md](TRAINING_REGIMES.md): proposed matched training objectives; these remain future experiments rather than supported conclusions.
-- [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md): formal teacher--student connection-packet specification, CPU training curriculum, ablations, theorem target, and falsification criteria.
+- [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md): unified teacher--student protocol combining the KL--Sobolev Levi--Civita guarantee with direct \((G,L,C)\) packet distillation, derivative controls, CPU curriculum, and falsification criteria.
 - [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md), [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md), [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md), and [RESEARCH_NOTES.md](RESEARCH_NOTES.md): historical development notes, superseded wherever they conflict with the manuscript or protocol.
 
 ## Implemented code
@@ -76,5 +76,8 @@ The cross-model extension asks whether a large teacher can transfer this local
 predictive structure to a smaller student through compact \((G,L,C)\) packets on a
 shared intervention chart. The packet reconstructs the full Amari connection
 family without aligning hidden dimensions. Output-only, metric-only,
-Levi--Civita, full-cubic, and connection-scrambled controls are compared at matched
-student NLL and compute; no distillation result has yet been run.
+centered-logit Jacobian, square-root Jacobian, Levi--Civita, full-cubic, and
+connection-scrambled controls are compared at matched student NLL and compute.
+The separate KL-plus-\(H^s\) route tests the manuscript's vocabulary-independent
+LC transport guarantee while treating lower-order roughness only as a
+heuristic. No distillation result has yet been run.

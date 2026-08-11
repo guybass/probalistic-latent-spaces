@@ -1,6 +1,6 @@
 # Project overview
 
-> **Current status (11 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion. Predictive connection distillation is now formally specified but not implemented.
+> **Current status (12 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion. Predictive connection distillation is now formally specified but not implemented.
 
 ## The 30-second version
 
@@ -225,8 +225,8 @@ These are engineering results, not semantic evidence. The planes were not spectr
 - Does the preferred connection develop reproducibly during pretraining?
 - Can a training objective deliberately create more transferable connection-linear representations?
 - Can compact predictive \((G,L,C)\) packets transfer a teacher's connection
-  structure and semantic transport to a smaller student beyond output-only and
-  metric-only distillation?
+  structure and semantic transport to a smaller student beyond output-only,
+  generic Jacobian, square-root Jacobian, and metric-only distillation?
 
 ## How the hypothesis can lose
 
@@ -260,10 +260,13 @@ See [TRAINING_REGIMES.md](TRAINING_REGIMES.md) for the complete design.
 The separate cross-model compression study avoids hidden-dimension alignment by
 placing teacher and student on the same low-dimensional intervention chart. It
 distills an output anchor, Fisher metric, first-kind Levi--Civita coefficient,
-and Amari--Chentsov tensor. See
+and Amari--Chentsov tensor. It also tests the manuscript's complementary
+KL-plus-Sobolev route to Levi--Civita transport agreement, with centered-logit
+and square-root Jacobian controls. See
 [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
-for the packet schema, staged training curriculum, matched D0--D6 arms, theorem
-target, and stopping rules.
+for the packet schema, staged training curriculum, derivative controls,
+regularity audits, exact guarantees, remaining theorem target, and stopping
+rules.
 
 ## Recommended reading order
 
