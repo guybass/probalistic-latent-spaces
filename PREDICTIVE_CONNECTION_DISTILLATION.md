@@ -142,6 +142,25 @@ Thus the teacher packet
 contains the local output anchor and the entire Amari connection family. The
 geometric part is independent of the teacher hidden dimension.
 
+One dependence inside the packet must be stated explicitly. Because the inner
+product \(\langle\partial_{ij}\psi,\partial_k\psi\rangle\) extracts the
+tangential part of the second derivative,
+
+\[
+(L_M)_{ij,k}
+=\frac12\bigl(
+\partial_i(G_M)_{jk}+\partial_j(G_M)_{ik}-\partial_k(G_M)_{ij}
+\bigr)
+\]
+
+exactly: the first-kind coefficient is a pointwise function of the first
+derivatives of the metric field. At isolated packet points \(L_M\) carries
+derivative information that sparse samples of \(G_M\) do not determine, but in
+the dense-sampling limit the pair \((G,L)\) is redundant, since matching
+\(G\) on a fine grid pins \(L\). The cubic tensor \(C\) is the only packet
+component carrying geometric information not determined by the metric field.
+The interpretation of the matched arms in Section 7 depends on this fact.
+
 ### 3.1 Packet size
 
 Using tensor symmetries, an \(m\)-dimensional chart needs
@@ -352,7 +371,11 @@ is cheaper and may be used as a heuristic crossed arm, but it is not the
 \(H^{s_*}\) hypothesis when \(s_*>2\). Finite-grid estimates of either
 quantity are numerical audits rather than proofs of a uniform bound. A
 band-limited chart basis may convert finite coefficient control into a
-certified bound, but its bandwidth must be frozen and sensitivity tested.
+certified bound, but its bandwidth must be frozen and sensitivity tested. For
+\(s_*\ge4\), that is for two-dimensional charts, the band-limited route is
+the primary audit instrument; direct fourth-order finite differences of
+full-vocabulary predictive maps are numerically unreliable at that order and
+serve as a secondary check only.
 
 ### 4.4 Fisher metric loss
 
@@ -577,9 +600,9 @@ the same examples in the same order.
 | Jz | output KD + centered-logit Jacobian | does generic derivative matching explain the gain? |
 | Jpsi | output KD + square-root Jacobian | does predictive-tangent orientation add value, and does square-root weighting beat logits? |
 | D2 | output KD + \(G\) | does local Fisher sensitivity add value? |
-| D3 | output KD + \((G,L)\) | does LC connection transfer add value beyond metric matching? |
-| D4 | output KD + \((G,L,C)\) | does the full Amari family add value beyond LC? |
-| D5 | output KD + \(G\) + Fisher-orthogonally scrambled \(L,C\) targets | does the correctly oriented teacher connection matter beyond loss scale? |
+| D3 | output KD + \((G,L)\) | does densified metric-derivative information add value beyond sparse \(G\)? |
+| D4 | output KD + \((G,L,C)\) | does the metric-independent cubic tensor add value beyond LC? |
+| D5 | output KD + \((G,L)\) + Fisher-orthogonally scrambled \(C\) target | does the correctly oriented cubic tensor matter beyond loss scale? |
 | D6 | D4 + integrated path loss | does explicit transport improve over pointwise packet matching? |
 
 Use **Jpsi** as the machine-readable arm name while writing it as
@@ -589,13 +612,25 @@ Use **Jpsi** as the machine-readable arm name while writing it as
 **D1-R2**, and **D2-R2**; they are not silently pooled with their parent arms.
 
 For D5, sample a nonidentity linear map \(R\) from the orthogonal group of
-\(G_T\), transform every covariant index of \(L_T\) and \(C_T\) by \(R\), and
-use those transformed tensors in place of the teacher tensors. Because
-\(R^\top G_TR=G_T\), this preserves the tensor symmetries and teacher-Fisher
-norms while scrambling their alignment with the declared semantic chart. Draw
-the map once per packet and seed and hold it fixed. Entrywise random tensors
-rescaled to the same norms may be reported as a secondary stress test, but they
-need not be realizable as a coherent local jet and are not the primary control.
+\(G_T\), transform every covariant index of \(C_T\) by \(R\), and use the
+transformed cubic tensor in place of the teacher tensor while keeping the
+\(G_T\) and \(L_T\) targets intact. Because \(R^\top G_TR=G_T\), this
+preserves the tensor symmetries and teacher-Fisher norms while scrambling the
+cubic tensor's alignment with the declared semantic chart. Draw the map once
+per packet and seed and hold it fixed.
+
+\(L_T\) must not be scrambled. Since \(L\) is a pointwise function of the
+metric derivatives (Section 3), a scrambled-\(L\) target is jointly
+inconsistent with the retained \(G_T\) target at dense packet sampling: no
+smooth predictive map satisfies both, so that arm acquires an elevated loss
+floor for feasibility reasons unrelated to semantic orientation, confounding
+the \(D4-D5\) contrast. Even the scrambled cubic tensor need not be exactly
+realizable as the jet of a categorical predictive map, so every arm must
+report the achieved training values of its active geometric terms; a D5 floor
+visibly above D4's invalidates the orientation conclusion for that run.
+Entrywise random tensors rescaled to the same norms, and a joint
+\((L,C)\) scramble, may be reported as secondary stress tests only, with the
+feasibility caveat stated.
 
 The primary contrasts are
 
@@ -609,10 +644,16 @@ D4-D5.
 \]
 
 The \(J_\psi-J_z\) contrast tests square-root predictive coordinates against
-an established derivative-matching baseline. \(D3-D2\) and
-\(D3-J_\psi\) jointly test whether connection information helps beyond both
-an intrinsic first-order target and the stronger oriented predictive
-Jacobian. The **-H** and **-R2** contrasts test anti-oscillation regularization;
+an established derivative-matching baseline. Because \(L\) is a pointwise
+function of the metric derivatives (Section 3), \(D3-D2\) tests densification
+of metric-derivative information at sparse packet points, not transfer of a
+geometric object beyond the metric field; a \(D3-D2\) gain must not be
+reported as connection transfer beyond the metric. The only contrast that
+adds geometric information not determined by the metric field is
+\(D4-D3\), through the Amari--Chentsov tensor, and \(D4-D5\) tests whether
+its teacher orientation matters beyond loss scale. \(D3-J_\psi\) tests the
+intrinsic packet route against the stronger oriented predictive Jacobian.
+The **-H** and **-R2** contrasts test anti-oscillation regularization;
 only the former can be compared to the theorem assumptions after its measured
 audit passes. D6 is secondary because it introduces additional solver and
 path-design choices.
@@ -641,8 +682,10 @@ The first language-model pilot is deliberately small:
 - train only adapters or the final transformer block; freeze the LM head;
 - sequence length at most 64;
 - nine teacher stencil evaluations per context for a complete two-dimensional
-  second-order central-difference jet; the \(H^4\) audit uses a separately
-  preregistered wider stencil or a frozen band-limited basis;
+  second-order central-difference jet; the two-dimensional \(H^4\) audit uses
+  a frozen band-limited chart basis with preregistered, sensitivity-tested
+  bandwidth as its primary instrument, with a wider finite-difference stencil
+  as a secondary check only;
 - teacher inference and packet generation performed once on CPU;
 - stage A: D0, D1, Jz, Jpsi, and D2;
 - stage B: D3 and D4 only after stage A passes its numerical gates;
@@ -753,7 +796,8 @@ A positive connection-distillation result requires all of:
 3. validation NLL is matched or the arm lies on a better Pareto frontier;
 4. the result replicates across at least three of four seeds;
 5. the gain survives finite-difference, rank, and ODE-step sensitivity;
-6. it beats the Fisher-orthogonally scrambled control D5 when that arm is run;
+6. it beats the scrambled-cubic control D5 when that arm is run, with
+   comparable achieved geometric-loss floors across the compared arms;
 7. it transfers to contexts and semantic operations excluded from packet
    generation;
 8. any risk-to-transport interpretation reports stable measured
@@ -937,6 +981,8 @@ schema exist.
    - packet serialization and quantization error;
    - logit-gauge invariance and the strict distinction between Jacobian and
      Gram-metric matching;
+   - consistency of the packet \(L\) with finite differences of the packet
+     \(G\) field on dense synthetic charts;
    - analytic Sobolev-order and oscillatory-counterexample fixtures;
    - conditional-variance decomposition on a noninjective map;
    - zero loss for identical teacher/student maps;

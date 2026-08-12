@@ -1,4 +1,5 @@
 \documentclass[11pt]{article}
+\pdfoutput=1
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -48,6 +49,12 @@ Stability of Fisher Connections and Semantic Transport in Neural Representations
 \begin{abstract}
 A probabilistic decoder equips its predictively identifiable hidden-state quotient with the pullback Fisher metric and Amari--Chentsov tensor. We establish a stability hierarchy for comparing this geometry across models. Exact equality of predictive images preserves every Amari $\alpha$-connection, transport, curvature, and intrinsic predictive field. Uniform KL convergence alone does not imply even pointwise Fisher-metric convergence. General $\alpha$-transport is stable under uniform interiority, nondegeneracy, and $C^2$ predictive agreement, but the resulting worst-case constants are poorly adapted to large vocabularies. For the Levi--Civita connection we remove both the vocabulary-size and minimum-token-probability dependence: $C^2$ closeness of the square-root predictive maps controls the connection and transport, and integrated KL plus a uniform Hilbert-valued Sobolev bound supplies this closeness at an explicit rate. A paired boundary Bernoulli construction proves that the same square-root regularity cannot control any fixed nonzero-$\alpha$ connection without additional information. Score-moment identities identify the required raised third-order moment and yield probability-floor-free formulas at affine softmax heads. Finally, conditional Fisher variance is the exact obstruction to descending a semantic effect through a noninjective predictive map; it vanishes identically when that map is injective. Constant vector reuse at an affine head is exponential transport on the ambient intervention family, so superiority of any other connection is a held-out empirical hypothesis rather than a consequence of pretraining.
 \end{abstract}
+
+\medskip
+\noindent\textbf{MSC 2020:} 53B12, 62B11, 68T07.
+
+\smallskip
+\noindent\textbf{Keywords:} information geometry, Fisher--Rao metric, Amari $\alpha$-connections, parallel transport, stability estimates, neural representations.
 
 \section{Introduction}
 
