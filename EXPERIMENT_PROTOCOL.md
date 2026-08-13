@@ -707,7 +707,7 @@ $env:PYTHONPATH=(Join-Path (Get-Location) 'src')
   --output results\pythia_14m_pilot.json
 ```
 
-The command above reproduces the historical execution-only pilot. The following command is a corrected spectrum-matched **finite-chord diagnostic**, not the primary inferential experiment: it still uses three hard-coded prompt factorials, conventional exponential-coordinate chords, and one model seed. The continuous-tangent, preregistered-prompt, multi-seed study specified above requires a separate driver and data files.
+The command above reruns the historical execution-only pilot design. It does not reproduce the stored control draws: the committed JSONs predate the order-independent hashed control seeding (`stable_control_seed`, introduced in commit `93fa3f0`), so the Fisher-Haar planes are redrawn deterministically under the current scheme and per-plane values differ from the archived outputs. Design, prompts, checkpoints, and all deterministic model quantities are unchanged. The following command is a corrected spectrum-matched **finite-chord diagnostic**, not the primary inferential experiment: it still uses three hard-coded prompt factorials, conventional exponential-coordinate chords, and one model seed. The continuous-tangent, preregistered-prompt, multi-seed study specified above requires a separate driver and data files.
 
 ```powershell
 $env:PYTHONPATH=(Join-Path (Get-Location) 'src')

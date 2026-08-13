@@ -89,6 +89,8 @@ Pullback geometry in learned latent spaces is also established. \citet{arvanitid
 
 Cross-model representation convergence has been studied from several directions. The Platonic Representation Hypothesis proposes convergence toward shared statistical structure \citep{huhEtAl2024}. \citet{yuEtAl2025} align distinct neural latent geometries with pullback metrics and relative geodesic representations. \citet{huNiuVarma2026} model contextual transformations as vector fields and report shared displacement structure across language-model families. Path dependence and holonomy have also been proposed as representation diagnostics \citep{sevetlidisPavlidis2026}. The stability analysis below asks when predictive agreement forces agreement of connection-dependent transport.
 
+Relative to all of these, the contribution here is the quantitative stability and separation package: square-root $C^2$ control of Levi--Civita transport with constants carrying no explicit vocabulary-size or token-probability factors, a paired Bernoulli construction showing that no fixed nonzero-$\alpha$ connection admits the same control without third-score-moment information, an integrated-KL-plus-Sobolev route from training risk to transport agreement, and the conditional-variance obstruction to semantic descent. To our knowledge, none of the works above states these stability or separation theorems; they supply the geometric setting and the empirical motivation rather than the agreement theory.
+
 Continuity of Fisher information requires control of both distributions and their derivatives; \citet{rezakhaniHassaniAlipour2019} prove such bounds in classical and quantum settings. Quantitative relaxations of sufficient statistics based on bi-Lipschitz Fisher metrics are studied by \citet{yamaguchiNozawa2024}. Here a fixed comparison diffeomorphism aligns the predictive maps; their closeness is then propagated through every Amari $\alpha$-connection to an explicit parallel-transport commutator bound. Sobolev regularity supplies the derivative control needed to derive this closeness from KL convergence.
 
 \section{Predictive statistical manifolds}
@@ -362,7 +364,14 @@ Then
 \end{split}
 \label{eq:commutator-bound}
 \end{equation}
-after using the aligned tangent norms. At $\varepsilon=0$, this reduces to Theorem~\ref{thm:exact-naturality}.
+where the operator norm measures inputs with the background norm on $T_{\gamma(0)}M_A$ and outputs with the \emph{aligned} tangent norm on $T_{\Phi(\gamma(1))}M_B$, defined as the pullback of the background norm through the alignment:
+\begin{equation}
+    \|w\|_{\mathrm{al},x}:=\|\dd\Phi_x^{-1}w\|,
+    \qquad w\in T_{\Phi(x)}M_B .
+\end{equation}
+In these norms the left-hand side equals
+$\|P_\gamma^{A,\alpha}-\dd\Phi_{\gamma(1)}^{-1}P_{\Phi\circ\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)}\|_{\op}$
+on $M_A$, which is the quantity the proof bounds. If an independently chosen background norm is used on $TM_B$ instead, the right-hand side acquires the additional factor $\sup_{x\in K}\|\dd\Phi_x\|_{\op}$, which must then be stated. At $\varepsilon=0$, this reduces to Theorem~\ref{thm:exact-naturality}.
 \end{corollary}
 
 \begin{proof}
@@ -894,10 +903,16 @@ For an estimated alignment $\Phi$ and sampled paths and tangent vectors, define
     \mathcal D_{\mathrm{PT}}^{(\alpha)}(A,B;\Phi)
     =\E_{\gamma,v}
     \frac{\|\dd\Phi_{\gamma(1)} P_\gamma^{A,\alpha}v
-    -P_{\Phi\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)} v\|}{\|v\|}.
+    -P_{\Phi\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)} v\|_{g_B(\Phi(\gamma(1)))}}{\|v\|_{g_A(\gamma(0))}}.
     \label{eq:pt-score}
 \end{equation}
-Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive equivalence, while Corollary~\ref{cor:cross-model-commutator} bounds it under approximate equivalence. A practical study should test whether \eqref{eq:pt-score} predicts held-out steering transfer or task generalization beyond output KL and representation-only similarities such as CKA.
+The numerator is measured in model $B$'s Fisher norm at the endpoint and the denominator in model $A$'s Fisher norm at the base point, so the score is invariant under separate reparameterizations of either chart. Because $\Phi$ enters both the transports and the comparison, the Fisher distortion of the alignment,
+\begin{equation}
+    \kappa(\Phi)
+    =\sup_{x\in K}\|\dd\Phi_x\|_{g_A\to g_B}\,
+     \sup_{x\in K}\|\dd\Phi_x^{-1}\|_{g_B\to g_A},
+\end{equation}
+must be reported alongside the score: rescaling or distorting $\Phi$ can otherwise trade score against distortion, and scores computed under different alignments are not comparable. Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive equivalence, while Corollary~\ref{cor:cross-model-commutator} bounds its aligned-norm counterpart under approximate equivalence. A practical study should test whether \eqref{eq:pt-score} predicts held-out steering transfer or task generalization beyond output KL and representation-only similarities such as CKA.
 
 \subsection{Selecting the connection}
 
