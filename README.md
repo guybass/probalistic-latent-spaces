@@ -36,6 +36,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - `src/predictive_geometry/stability.py`: square-root cubic diagnostics and executable finite-scale Levi--Civita stability bounds, including the metric-compatible transport refinement.
 - `src/predictive_geometry/field.py`: alpha-connection transport, local transport defect, and semantic connection fitting.
 - `src/predictive_geometry/benchmark.py`: held-out semantic quadrilateral benchmark with feasibility, Fisher error, KL/JS error, and transport metric distortion.
+- `src/predictive_geometry/distillation.py`: shared-chart connection packets with score-moment cubics, distillation losses, acceptance gates, checksummed serialization, and the packet-to-connection and packet-to-transport bounds.
 - `experiments/synthetic_validation.py`: Fisher-sphere and holonomy checks.
 - `experiments/synthetic_connection_recovery.py`: recovers synthetic mixture-, exponential-, and Fisher-generated compositions.
 - `experiments/pythia_cpu_smoke.py`: real Pythia checkpoint inference and curvature on CPU.
@@ -48,6 +49,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.
 - Synthetic connection identities are recovered exactly.
+- The distillation packet core recovers exact affine-head and Bernoulli closed forms, numerically verifies the packet-to-connection and packet-to-transport bounds, and demonstrates the KL-only oscillatory escape.
 - A real Pythia-14M pilot ran at four checkpoints with no GPU.
 - Small raw pilot JSON outputs are included under `results/`; downloaded model weights are excluded.
 

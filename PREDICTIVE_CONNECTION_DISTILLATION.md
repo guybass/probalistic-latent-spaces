@@ -1,7 +1,9 @@
 # Predictive Connection Distillation
 
-> **Status:** formal research and training protocol; not yet implemented and not
-> an empirical result.
+> **Status:** formal research and training protocol. The model-free packet
+> core (Section 13, items 1 and 5) is implemented and tested; packet
+> generation against real models, student training, and evaluation are not
+> implemented, and no empirical result exists.
 >
 > **Purpose:** compress a large teacher's local predictive geometry and semantic
 > transport law into a smaller student without requiring their hidden dimensions
@@ -910,7 +912,7 @@ These negative outcomes remain useful: they distinguish fixed-representation
 predictive insufficiency, generic derivative transfer, intrinsic metric
 transfer, connection-specific information, and chart overfitting.
 
-## 11. Mathematical guarantees and remaining target
+## 11. Mathematical guarantees and remaining targets
 
 ### 11.1 Proven risk-to-LC bridge
 
@@ -981,47 +983,111 @@ estimate
 No smallness assumption on \(\varepsilon_g\) is needed beyond the common
 metric floor.
 
-### 11.3 Packet-to-transport target
+### 11.3 Packet-to-transport bound
 
-The remaining theorem target is to combine the packet estimate with
-finite-difference and packet-quantization errors and the exact
-variation-of-connection identity. For paths of length at most \(L_0\), the
-desired consequence is
+This bound is now proved at the same level of rigor as the packet estimate.
+The missing sampling ingredient is Hölder interpolation between packet
+points; the transport step is the Duhamel--Gronwall argument already used by
+the paper's transport theorems.
+
+Fix compatible submultiplicative norms as in Section 11.2, a declared Hölder
+exponent \(\rho\in(0,1]\), and packet points \(\{z_i\}\subset U\) with fill
+distance \(h_{\mathrm{fill}}=\sup_{z\in U}\min_i\|z-z_i\|\).
+
+**Proposition (packet-to-transport).** Assume on \(U\):
+
+1. \(G_T,G_S\succeq\lambda I\);
+2. the connection fields satisfy
+   \(\|\Gamma_M^{(\alpha)}\|_{C^0(U)}\le M_M\) and
+   \([\Gamma_M^{(\alpha)}]_{C^\rho(U)}\le H_M\) for \(M\in\{T,S\}\);
+3. at every packet point the true-tensor defects obey the Section 11.2
+   hypotheses, so that
+
+\[
+\delta_{\mathrm{pack}}
+=\lambda^{-1}\left(\varepsilon_L+\frac{|\alpha|}2\varepsilon_C\right)
++\lambda^{-2}\varepsilon_g\left(M_L+\frac{|\alpha|}2M_C\right)
+\]
+
+bounds \(\|\Gamma_S^{(\alpha)}(z_i)-\Gamma_T^{(\alpha)}(z_i)\|\).
+
+Then every \(C^1\) path \(\gamma\subset U\) of background length
+\(L_\gamma\) satisfies
 
 \[
 \|P_{\gamma,S}^{(\alpha)}-P_{\gamma,T}^{(\alpha)}\|
 \le
-L_0\,\mathcal A
-\left(
-\varepsilon_g+\varepsilon_L+|\alpha|\varepsilon_C
-+\varepsilon_{FD}+\varepsilon_Q
-+\varepsilon_{\mathrm{sample}}
-\right),
-\qquad
-\varepsilon_{\mathrm{sample}}
-\lesssim h_{\mathrm{fill}}^{\rho}
-\bigl(\|\Gamma_T^{(\alpha)}\|_{C^\rho}
-+\|\Gamma_S^{(\alpha)}\|_{C^\rho}\bigr),
+L_\gamma\,
+e^{(M_T+M_S)L_\gamma}
+\Bigl(
+\delta_{\mathrm{pack}}
++(H_T+H_S)\,h_{\mathrm{fill}}^{\rho}
+\Bigr).
 \]
 
-where \(\mathcal A\) is a declared transport-growth or mixed-norm factor,
-\(\varepsilon_{FD}\) is finite-difference error, \(\varepsilon_Q\) is packet
-quantization error, and \(\varepsilon_{\mathrm{sample}}\) is the sampling
-term: packets constrain the connection only at sampled chart locations while
-transport integrates it continuously along the path, and the gap is
-controlled by the fill distance \(h_{\mathrm{fill}}\) of the packet grid
-together with a Hölder or Sobolev modulus of the connection between samples.
-The modulus is not a new assumption: the audited \(H^{s_*}\) envelope of
-Section 4.3 yields \(C^\rho\) control of the connection coefficients by
-Sobolev embedding, so the same audit that licenses the risk--regularity route
-supplies \(\varepsilon_{\mathrm{sample}}\). Without this term, small packet
-loss says nothing about a path running between packet points. For Levi--Civita, the metric-compatible and intrinsic
-mixed-norm bounds in the paper should replace a generic exponential growth
-factor.
+*Proof.* Every \(z\in\gamma\) lies within \(h_{\mathrm{fill}}\) of a packet
+point \(z_i\), so with \(\Delta\Gamma=\Gamma_S^{(\alpha)}-\Gamma_T^{(\alpha)}\),
 
-The proof must state chart norms, regularity orders, packet envelopes, and
-whether constants are pointwise or uniform. It must not infer derivative
-agreement from output KL alone.
+\[
+\|\Delta\Gamma(z)\|
+\le\|\Delta\Gamma(z_i)\|
++(H_T+H_S)\,h_{\mathrm{fill}}^\rho
+\le\delta_{\mathrm{pack}}+(H_T+H_S)\,h_{\mathrm{fill}}^\rho .
+\]
+
+Transport solves the linear ODE
+\(\dot V=-\Gamma_M(\gamma(t))[\dot\gamma(t)]V\) with fundamental solutions
+\(\Phi_M\). The Duhamel identity
+
+\[
+\Phi_T(1,0)-\Phi_S(1,0)
+=\int_0^1\Phi_S(1,s)\,
+\bigl(A_S(s)-A_T(s)\bigr)\,\Phi_T(s,0)\,ds,
+\qquad
+A_M(t)=-\Gamma_M(\gamma(t))[\dot\gamma(t)],
+\]
+
+together with the Gronwall bounds \(\|\Phi_M(t,s)\|\le e^{M_ML_\gamma}\) and
+\(\int_0^1\|A_S-A_T\|\,ds\le L_\gamma\sup_\gamma\|\Delta\Gamma\|\) gives the
+display. \(\blacksquare\)
+
+Three remarks make the bound operational.
+
+1. **Measurement inflation.** Measured packets differ from true tensors by
+   finite-difference and quantization error. If per-model, per-tensor
+   measurement errors are bounded by \(\eta_g,\eta_L,\eta_C\), replace each
+   \(\varepsilon_\bullet\) by \(\varepsilon_\bullet+2\eta_\bullet\). This is
+   where the \(\varepsilon_{FD}\) and \(\varepsilon_Q\) of the earlier
+   target statement enter, and \(\mathcal A=e^{(M_T+M_S)L_\gamma}\) is the
+   declared transport-growth factor.
+2. **Levi--Civita sharpening.** For \(\alpha=0\) the paper's
+   metric-compatible transport bound replaces the exponential growth factor
+   by its sharper metric-compatible counterpart.
+3. **Audited constants.** \(M_M\) and \(H_M\) are reported as audited
+   quantities: sup norms and finite-difference Hölder quotients of the
+   connection fields over the packet grid, with declared safety margins. The
+   audited \(H^{s_*}\) envelope of Section 4.3 with the spectral floor
+   supplies \(C^\rho\) control in principle, but the bound is evaluated from
+   the directly measured \(M_M,H_M\), not from embedding constants.
+
+Without the sampling term, small packet loss says nothing about a path
+running between packet points; with it, packet loss, fill distance, and the
+audited moduli convert into an explicit transport guarantee. The bound and a
+numerical verification against exactly integrated transport are implemented
+in `src/predictive_geometry/distillation.py` and
+`tests/test_distillation_packets.py`.
+
+### 11.4 Remaining open target: certified surrogate residual
+
+The genuinely open item is the Sobolev certificate of Section 4.3: bounding
+\(\|\psi_S-\psi_{\mathrm{fit}}\|_{H^{s_*}}\) for a band-limited surrogate
+fitted from finitely many chart samples. Finite samples cannot certify this
+residual without an a priori class assumption on the true map. A certificate
+therefore requires one of: an architecturally band-limited chart response, a
+proved modulus-of-continuity bound for the transformer's chart response, or
+acceptance of audit-only status. Until one of these is supplied, the
+\(H^{s_*}\) quantity remains an empirical spectral audit and the
+risk--regularity route remains conditional on it.
 
 ## 12. Relationship to prior work
 
@@ -1071,16 +1137,26 @@ which is established prior art.
 
 ## 13. Implementation roadmap
 
-No item below should be described as implemented until its tests and output
-schema exist.
+No item below may be described as implemented until its tests and output
+schema exist. Under this rule, items 1 and 5 are implemented; items 2--4 are
+not.
 
-1. `src/predictive_geometry/distillation.py`
-   - shared-chart packet dataclass and schema validation;
+1. `src/predictive_geometry/distillation.py` --- **implemented**:
+   - shared-chart packet dataclass with checksummed float32 serialization
+     and schema-version validation;
    - central-difference jet assembly for \(G\) and \(L\), and score-moment
      cubic assembly with the probability-difference form as audit;
-   - centered-logit and square-root Jacobian controls;
-   - integer \(H^{s_*}\) audit and lower-order roughness diagnostic;
-   - metric, first-kind LC, cubic, and raised-connection losses.
+   - Richardson-tolerance, finite-value, and rank acceptance gates with
+     rejection reasons retained for coverage reporting;
+   - centered-logit and square-root Jacobian control losses;
+   - metric, first-kind LC, and raised-cubic losses in teacher-Fisher norms;
+   - the Section 11.2 packet-to-connection and Section 11.3
+     packet-to-transport bounds;
+   - a one-dimensional finite-difference Sobolev grid audit (empirical, per
+     Section 11.4), the sufficiency decomposition of Section 9.4, and the
+     context-shuffled cubic control of Section 7.
+   The multi-dimensional \(H^{s_*}\) audit and the band-limited chart basis
+   are not yet implemented.
 2. `experiments/build_teacher_packets.py`
    - batched CPU teacher inference;
    - refinement and rank gates;
@@ -1091,21 +1167,33 @@ schema exist.
    - resumable CPU checkpoints.
 4. `experiments/evaluate_connection_student.py`
    - frozen predictive, geometric, transport, and semantic evaluation.
-5. `tests/test_distillation_packets.py`
-   - analytic Bernoulli and saturated-softmax packet fixtures;
-   - coordinate-change covariance;
-   - finite-difference convergence;
-   - packet serialization and quantization error;
-   - logit-gauge invariance and the strict distinction between Jacobian and
-     Gram-metric matching;
+5. `tests/test_distillation_packets.py` --- **implemented**, covering:
+   - analytic affine-softmax and boundary Bernoulli packet fixtures with
+     exact closed forms, including the vanishing of \(\Gamma^{(1)}\);
+   - score-moment versus probability-difference cubic estimators: affine
+     exactness and float32-underflow robustness;
+   - linear chart-change covariance of \(G\), \(C\), and
+     \(\Gamma^{(\alpha)}\);
    - consistency of the packet \(L\) with finite differences of the packet
-     \(G\) field on dense synthetic charts;
-   - analytic Sobolev-order and oscillatory-counterexample fixtures;
-   - conditional-variance decomposition on a noninjective map;
-   - zero loss for identical teacher/student maps;
-   - rejection of rank-deficient and mismatched-chart packets.
+     \(G\) field;
+   - zero defects under self-distillation;
+   - numerical domination of the Section 11.2 and 11.3 bounds over directly
+     computed connection and transport defects;
+   - the one-dimensional Sobolev grid audit against a closed form;
+   - the KL-only oscillatory escape;
+   - rank-gate and Richardson refinement-gate rejections;
+   - checksummed serialization round-trip and float32 quantization error;
+   - the strict distinction between Jacobian and Gram-metric matching;
+   - exact additivity of the sufficiency decomposition on discrete fibers;
+   - stratum-preserving context-shuffled cubic controls.
+   An explicit schema-version rejection test and a dedicated logit-gauge
+   test remain to be added.
 
 ## 14. Decision sequence
+
+Step 1 and the synthetic form of step 3 are complete via
+`src/predictive_geometry/distillation.py` and its tests; the remaining steps
+are open.
 
 1. Prove and test the finite-dimensional packet identities on synthetic maps.
 2. Implement deterministic packet generation and schema validation.
