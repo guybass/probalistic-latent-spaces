@@ -557,13 +557,23 @@ connection through
 | D2 | output KD plus Fisher metric matching |
 | D3 | D2 plus Levi--Civita connection matching |
 | D4 | D3 plus raised cubic matching |
-| D5 | D2 plus Fisher-orthogonally scrambled \(L,C\) targets replacing the teacher tensors |
+| D5 | D3 plus a context-shuffled teacher cubic target replacing \(C_T\); \(L\) is never scrambled |
 | D6 | D4 plus integrated transport matching; secondary only |
 
-For D5, transform all covariant indices with a nonidentity map \(R\) satisfying
-\(R^\top G_TR=G_T\), and hold the transformed targets fixed per packet and
-seed. This preserves symmetries and teacher-Fisher norms while breaking their
-semantic orientation. The primary contrasts are D2--D1, D3--D2, D4--D3, and
+For D5, keep the \(G_T\) and \(L_T\) targets and replace each packet's cubic
+target with the teacher's cubic tensor from a preregistered donor context,
+shuffled within strata of matched Fisher conditioning and metric scale and
+held fixed per seed. \(L\) is never scrambled: it is a pointwise function of
+the metric derivatives, so a scrambled-\(L\) target is jointly infeasible
+with the retained \(G_T\) target at dense sampling. Per-packet
+Fisher-orthogonal scrambles of \(C\) are discontinuous across packets and act
+as shrinkage pressure rather than an orientation control; they are secondary
+stress tests. Achieved geometric-loss floors must be reported per arm. The
+chart output-KD term is evaluated at the identical full stencil-point set in
+every arm, making D1 the stencil-matched exposure control.
+[PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
+Section 7 is authoritative for arm definitions.
+The primary contrasts are D2--D1, D3--D2, D4--D3, and
 D4--D5, with the additional mandatory comparisons Jpsi--Jz and D3--Jpsi.
 The Jacobian arms separate generic derivative distillation, oriented
 square-root tangent matching, and intrinsic Gram-metric matching. D6 is run only
@@ -582,15 +592,22 @@ fixed-representation conditional-variance obstruction and cross-model
 conditional-mean-field mismatch in the student metric.
 
 A positive result requires a connection arm to improve held-out transport and a
-preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched NLL, replicate
-in at least three of four seeds, survive rank and stencil sensitivity, and
+preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched NLL with
+paired seed effects and hierarchical bootstrap intervals clearing a
+preregistered practical-effect threshold (four seeds is a preliminary pilot
+scale; three-of-four counting is a stopping rule, not a confirmatory
+standard), survive rank and stencil sensitivity, and
 generalize to contexts and operations excluded from packet construction. Lower
 packet loss alone is not evidence of useful compression.
 
 ### 8.4 Numerical gates
 
-- construct packets with central differences at \((h,h/2,h/4)\);
-- accept only a visible derivative-convergence plateau;
+- construct packets in the declared float64 teacher inference dtype, with
+  score-moment cubics from JVPs or logit central differences as primary and
+  the probability-difference cubic as audit;
+- refine central differences at \((h,h/2,h/4)\) and accept via a
+  Richardson-style preregistered relative tolerance, not a visually judged
+  plateau;
 - require teacher and student Fisher spectral floors on the declared chart;
 - audit the theorem-matched integer Sobolev order
   \(s_*=\min\{k\in\mathbb N:k>2+m/2\}\); label an \(H^2\)-style roughness

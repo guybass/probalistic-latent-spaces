@@ -74,8 +74,14 @@ and, for model \(M\) with embedding table \(E_M\), inject
 x_M(z)=\sum_{r=0}^m\pi_r(z)E_M(a_r)
 \]
 
-at that position. Thus the two models receive the same token-mixture
-intervention even when their embedding dimensions differ. Anchor sets,
+at that position. Thus the two models receive the same declared barycentric
+intervention protocol even when their embedding dimensions differ. This is an
+operational identification, not a semantic one: the transformer is nonlinear
+and the two embedding tables need not assign identical meaning to their
+barycenters, so the chart aligns interventions without asserting that they
+are the same semantic intervention. Any behavioral conclusion must survive
+preregistered variation of anchor sets, intervention positions, chart radii,
+and interpolation constructions. Anchor sets,
 positions, and the compact domain \(U\) are frozen before packet generation.
 The central chart point need not be \(z=0\), but it must be recorded.
 
@@ -178,9 +184,21 @@ geometric scalars for \((G,L,C)\). For \(m=4\), this is
 \]
 
 floats per chart point. At 100,000 points this is approximately 28 MB in
-float32, excluding optional top-\(k\) logits. Full teacher distributions need
-not be retained once the packet and ordinary distillation targets have been
-created.
+float32. That figure covers the geometric sidecar \((G,L,C)\) only: the
+packet as defined also contains the output anchor \(q_T\), and full-vocabulary
+anchors are not compact. At Pythia's 50,304-token vocabulary, 100,000 central
+float32 outputs occupy about 18.7 GiB, the 8,000-point pilot about 1.5 GiB,
+and retaining all nine stencil outputs about 13.5 GiB. The honest claim is
+therefore that \((G,L,C)\) is a compact incremental geometric sidecar to
+ordinary output distillation, not a compact total teacher dataset. The
+storage plan for \(q_T\) must be declared: full-vocabulary anchors, possibly
+float16, for the chart-KD points, or top-\(k\) anchors with a declared,
+error-bounded tail treatment. Top-\(k\) storage does not by itself
+instantiate the full-vocabulary forward-KL estimate used by the
+risk--regularity route; that requires either a bounded tail approximation
+error or a fixed outcome coarsening declared in advance. Full teacher
+distributions need not be retained for points used only by the geometric
+losses once the packet and declared distillation targets have been created.
 
 ### 3.2 Required packet metadata
 
@@ -199,6 +217,14 @@ Every packet shard must store:
 
 Packets that fail the rank, derivative-convergence, or finite-value gates are
 retained as failures in the audit log but excluded from connection training.
+
+Packet rejection conditions the experiment on teacher regions where the
+method is numerically well behaved, which is a selection effect. The
+experimental contract must therefore preregister a minimum packet acceptance
+coverage, report acceptance rates by context family and semantic operation,
+compare the behavioral difficulty of rejected and accepted contexts, and
+declare a failure rule that stops the run when coverage falls below the
+preregistered floor.
 
 ### 3.3 Two complementary routes to transport agreement
 
@@ -287,6 +313,13 @@ temperature-softened substitute, estimates the \(\mathcal K_{T,S}\) used by
 the risk-to-transport theorem. Geometry alone does not determine the global
 predictive function, so output anchoring is mandatory.
 
+In every arm, the chart expectation runs over the identical frozen
+stencil-point set used for packet generation, not only over central points.
+This equalizes chart exposure across arms: no arm receives student gradients
+at chart locations another arm never sees, so the output-only arm D1 is
+itself the stencil-matched exposure control, and derivative matching cannot
+be confounded with denser neighborhood augmentation.
+
 This chart loss is an empirical estimate of \(\mathcal K_{T,S}\), not the
 population integral automatically. The chart sampler, density, and quadrature
 or Monte Carlo error must be reported. Reverse-KL arms may be studied as
@@ -370,12 +403,19 @@ A second-derivative roughness penalty
 is cheaper and may be used as a heuristic crossed arm, but it is not the
 \(H^{s_*}\) hypothesis when \(s_*>2\). Finite-grid estimates of either
 quantity are numerical audits rather than proofs of a uniform bound. A
-band-limited chart basis may convert finite coefficient control into a
-certified bound, but its bandwidth must be frozen and sensitivity tested. For
-\(s_*\ge4\), that is for two-dimensional charts, the band-limited route is
-the primary audit instrument; direct fourth-order finite differences of
-full-vocabulary predictive maps are numerically unreliable at that order and
-serve as a secondary check only.
+band-limited chart basis controls the fitted surrogate, not automatically the
+transformer's true predictive map: fitting sampled outputs certifies
+\(\|\psi_{\mathrm{fit}}\|_{H^{s_*}}\) only, and a theorem-grade certificate
+additionally requires a certified approximation residual
+\(\|\psi_S-\psi_{\mathrm{fit}}\|_{H^{s_*}}\) through order-\(s_*\)
+derivatives, which this protocol does not currently supply. The band-limited
+quantity is therefore an **empirical spectral audit**, not a certificate,
+unless the response is architecturally restricted to the band-limited family
+or such a residual bound is proved. Its bandwidth must be frozen and
+sensitivity tested. For \(s_*\ge4\), that is for two-dimensional charts, this
+empirical spectral audit is the primary instrument; direct fourth-order
+finite differences of full-vocabulary predictive maps are numerically
+unreliable at that order and serve as a secondary check only.
 
 ### 4.4 Fisher metric loss
 
@@ -493,13 +533,34 @@ L_h(u,v,w)
 =\langle D_h^2\psi[u,v],D_h\psi[w]\rangle.
 \]
 
-The cubic tensor uses central differences of \(q\):
+The cubic tensor uses the score-moment identity of
+[paper/main.tex](paper/main.tex) as its primary estimator. With logit
+directional derivatives estimated by exact JVPs or central differences of
+logits, the scores are
+
+\[
+S_a(u)=D_u\ell_a-\sum_b q_b\,D_u\ell_b,
+\]
+
+which is invariant under the softmax gauge, and
+
+\[
+C(u,v,w)
+=\sum_a q_a\,S_a(u)S_a(v)S_a(w).
+\]
+
+Logits are order one and this form carries no inverse-probability factors, so
+it avoids the catastrophic cancellation of probability differences near rare
+tokens. The direct probability-difference form
 
 \[
 C_h(u,v,w)
 =\sum_a
-\frac{D_hq_a[u]D_hq_a[v]D_hq_a[w]}{q_a(z)^2}.
+\frac{D_hq_a[u]D_hq_a[v]D_hq_a[w]}{q_a(z)^2}
 \]
+
+subtracts tiny numbers and divides by \(q_a^2\); it is retained only as an
+independent audit on accepted packets, never as the primary estimator.
 
 Square-root calculations use float64 and stable probabilities. The LC packet
 does not require a tokenwise probability floor, but the nonzero-\(\alpha\)
@@ -508,7 +569,17 @@ the paper.
 
 For smooth maps, the central first derivative is \(O(h^2)\); both second
 derivative stencils are \(O(h^2)\) under sufficient fourth-order regularity.
-Use \((h,h/2,h/4)\) and accept only a visible convergence plateau. Directional
+Finite-difference accuracy is bounded by the teacher inference precision:
+evaluating a float32 forward pass at \(z\pm h\) and casting the outputs to
+float64 does not produce float64 derivatives, and the refinement sequence can
+then measure the quantization floor rather than convergence. The packet
+builder therefore declares the teacher inference dtype, runs teacher
+evaluation in float64 on CPU, which is affordable at the pilot scales, and
+prefers exact JVP derivatives wherever autodiff is available, with finite
+differences as the audit path. Use \((h,h/2,h/4)\) with a formal
+Richardson-style acceptance rule: accept a packet only when the extrapolated
+derivative changes by less than a preregistered relative tolerance between
+consecutive refinements, not on a visually judged plateau. Directional
 subsampling may be used during training, but the held-out audit evaluates the
 complete small-chart tensors.
 
@@ -533,8 +604,10 @@ Before packet generation, freeze:
 
 ### Phase 1: build and audit teacher packets
 
-1. Evaluate teacher outputs on the central-difference stencil.
-2. Construct \((q_T,G_T,L_T,C_T)\) in float64.
+1. Evaluate teacher outputs on the central-difference stencil in the
+   declared teacher inference dtype, float64 on CPU at pilot scales.
+2. Construct \((q_T,G_T,L_T,C_T)\) in float64, with score-moment cubics from
+   JVPs or logit differences as the primary estimator.
 3. Repeat at \((h,h/2,h/4)\).
 4. Reject nonconvergent or rank-deficient packets according to the frozen gates.
 5. Audit the teacher \(H^{s_*}\) norm or declare the lower-order roughness
@@ -591,7 +664,10 @@ connection defect, and transport commutators without further tuning.
 ## 7. Matched experimental arms
 
 Every arm starts from the same student initialization for a given seed and sees
-the same examples in the same order.
+the same examples in the same order. All arms share the same chart stencil
+exposure through the output anchor (Section 4.1); residual per-point compute
+differences from JVP evaluation in the geometric arms are governed by the
+NLL-matched or Pareto budget rule and must be reported.
 
 | Arm | Objective beyond data NLL | Question |
 |---|---|---|
@@ -602,7 +678,7 @@ the same examples in the same order.
 | D2 | output KD + \(G\) | does local Fisher sensitivity add value? |
 | D3 | output KD + \((G,L)\) | does densified metric-derivative information add value beyond sparse \(G\)? |
 | D4 | output KD + \((G,L,C)\) | does the metric-independent cubic tensor add value beyond LC? |
-| D5 | output KD + \((G,L)\) + Fisher-orthogonally scrambled \(C\) target | does the correctly oriented cubic tensor matter beyond loss scale? |
+| D5 | output KD + \((G,L)\) + context-shuffled teacher cubic target | does the correctly oriented cubic tensor matter beyond its scale and realizability? |
 | D6 | D4 + integrated path loss | does explicit transport improve over pointwise packet matching? |
 
 Use **Jpsi** as the machine-readable arm name while writing it as
@@ -611,26 +687,34 @@ Use **Jpsi** as the machine-readable arm name while writing it as
 \(\mathcal R_2\) condition. These regularity variants are labeled **D1-H**, **D2-H**,
 **D1-R2**, and **D2-R2**; they are not silently pooled with their parent arms.
 
-For D5, sample a nonidentity linear map \(R\) from the orthogonal group of
-\(G_T\), transform every covariant index of \(C_T\) by \(R\), and use the
-transformed cubic tensor in place of the teacher tensor while keeping the
-\(G_T\) and \(L_T\) targets intact. Because \(R^\top G_TR=G_T\), this
-preserves the tensor symmetries and teacher-Fisher norms while scrambling the
-cubic tensor's alignment with the declared semantic chart. Draw the map once
-per packet and seed and hold it fixed.
+For D5, keep the \(G_T\) and \(L_T\) targets intact and replace the cubic
+target at each packet with the teacher's own cubic tensor drawn from a
+different, preregistered donor context: shuffle \(C_T\) between context
+blocks within preregistered strata of matched Fisher conditioning and metric
+scale, holding the assignment fixed per seed. The donor tensors are smooth
+along each donor chart, realizable as actual teacher jets, and norm-matched
+in distribution by the stratification, but their orientation is wrong for the
+recipient context. This context-shuffled field is the primary negative
+control.
 
-\(L_T\) must not be scrambled. Since \(L\) is a pointwise function of the
-metric derivatives (Section 3), a scrambled-\(L\) target is jointly
-inconsistent with the retained \(G_T\) target at dense packet sampling: no
-smooth predictive map satisfies both, so that arm acquires an elevated loss
-floor for feasibility reasons unrelated to semantic orientation, confounding
-the \(D4-D5\) contrast. Even the scrambled cubic tensor need not be exactly
-realizable as the jet of a categorical predictive map, so every arm must
-report the achieved training values of its active geometric terms; a D5 floor
-visibly above D4's invalidates the orientation conclusion for that run.
-Entrywise random tensors rescaled to the same norms, and a joint
-\((L,C)\) scramble, may be reported as secondary stress tests only, with the
-feasibility caveat stated.
+A per-packet Fisher-orthogonal scramble --- drawing \(R\) with
+\(R^\top G_TR=G_T\) independently at each packet point and transforming every
+covariant index of \(C_T\) --- preserves pointwise symmetries and
+teacher-Fisher norms but produces a discontinuous, generally unrealizable
+cubic target field. Optimizing against incoherent neighboring targets pushes
+the student toward shrinking its cubic tensor toward zero, which is a
+different inductive bias rather than an orientation control. The scramble and
+entrywise random tensors rescaled to matched norms are therefore secondary
+stress tests only.
+
+\(L_T\) must never be scrambled in any control. Since \(L\) is a pointwise
+function of the metric derivatives (Section 3), a scrambled-\(L\) target is
+jointly inconsistent with the retained \(G_T\) target at dense packet
+sampling: no smooth predictive map satisfies both, so that arm acquires an
+elevated loss floor for feasibility reasons unrelated to semantic
+orientation. Every arm must report the achieved training values of its active
+geometric terms; a control-arm floor visibly above D4's invalidates the
+corresponding contrast for that run.
 
 The primary contrasts are
 
@@ -678,14 +762,14 @@ The first language-model pilot is deliberately small:
 - one-dimensional charts for the initial \(H^3\) regularity audit and
   two-dimensional soft-token charts for the packet experiment;
 - 5,000 discovery contexts and 1,000/2,000 validation/test contexts;
-- four training seeds;
+- four training seeds, a preliminary pilot scale (Section 10);
 - train only adapters or the final transformer block; freeze the LM head;
 - sequence length at most 64;
 - nine teacher stencil evaluations per context for a complete two-dimensional
   second-order central-difference jet; the two-dimensional \(H^4\) audit uses
   a frozen band-limited chart basis with preregistered, sensitivity-tested
-  bandwidth as its primary instrument, with a wider finite-difference stencil
-  as a secondary check only;
+  bandwidth as its primary empirical spectral audit (Section 4.3), with a
+  wider finite-difference stencil as a secondary check only;
 - teacher inference and packet generation performed once on CPU;
 - stage A: D0, D1, Jz, Jpsi, and D2;
 - stage B: D3 and D4 only after stage A passes its numerical gates;
@@ -794,9 +878,13 @@ A positive connection-distillation result requires all of:
 1. D3 or D4 improves held-out transport over D1, Jz, Jpsi, and D2;
 2. it improves a preregistered behavioral transfer outcome;
 3. validation NLL is matched or the arm lies on a better Pareto frontier;
-4. the result replicates across at least three of four seeds;
+4. the preregistered primary behavioral outcome improves with paired seed
+   effects and hierarchical bootstrap intervals (Section 9.5) clearing a
+   preregistered practical-effect threshold; with four seeds this is a
+   preliminary pilot criterion, and simple three-of-four counting is a pilot
+   stopping rule, not a confirmatory standard;
 5. the gain survives finite-difference, rank, and ODE-step sensitivity;
-6. it beats the scrambled-cubic control D5 when that arm is run, with
+6. it beats the context-shuffled cubic control D5 when that arm is run, with
    comparable achieved geometric-loss floors across the compared arms;
 7. it transfers to contexts and semantic operations excluded from packet
    generation;
@@ -907,12 +995,27 @@ L_0\,\mathcal A
 \left(
 \varepsilon_g+\varepsilon_L+|\alpha|\varepsilon_C
 +\varepsilon_{FD}+\varepsilon_Q
++\varepsilon_{\mathrm{sample}}
 \right),
+\qquad
+\varepsilon_{\mathrm{sample}}
+\lesssim h_{\mathrm{fill}}^{\rho}
+\bigl(\|\Gamma_T^{(\alpha)}\|_{C^\rho}
++\|\Gamma_S^{(\alpha)}\|_{C^\rho}\bigr),
 \]
 
 where \(\mathcal A\) is a declared transport-growth or mixed-norm factor,
-\(\varepsilon_{FD}\) is finite-difference error, and \(\varepsilon_Q\) is packet
-quantization error. For Levi--Civita, the metric-compatible and intrinsic
+\(\varepsilon_{FD}\) is finite-difference error, \(\varepsilon_Q\) is packet
+quantization error, and \(\varepsilon_{\mathrm{sample}}\) is the sampling
+term: packets constrain the connection only at sampled chart locations while
+transport integrates it continuously along the path, and the gap is
+controlled by the fill distance \(h_{\mathrm{fill}}\) of the packet grid
+together with a Hölder or Sobolev modulus of the connection between samples.
+The modulus is not a new assumption: the audited \(H^{s_*}\) envelope of
+Section 4.3 yields \(C^\rho\) control of the connection coefficients by
+Sobolev embedding, so the same audit that licenses the risk--regularity route
+supplies \(\varepsilon_{\mathrm{sample}}\). Without this term, small packet
+loss says nothing about a path running between packet points. For Levi--Civita, the metric-compatible and intrinsic
 mixed-norm bounds in the paper should replace a generic exponential growth
 factor.
 
@@ -953,6 +1056,19 @@ conditional-variance decomposition is presented as a fixed-representation
 failure-localization tool, not as a claim that prior distillation work lacks
 all notions of student capacity.
 
+The information content of the packet must also be stated honestly.
+Pointwise, \(G\) and \(C\) are functions of the output anchor and the
+centered-logit Jacobian, so the first-order Jacobian arms' targets already
+determine them; \(L\) adds second-jet information at sparse packet points,
+and on a dense chart even that reduces to derivatives of the Jacobian
+targets. PCD therefore transfers no information fundamentally unavailable to
+derivative distillation. Its defensible advantage claim is that the invariant
+tensor packet is a more compact, dimension-independent, and possibly
+better-conditioned supervision signal --- an inductive-bias claim. If D4
+wins, the result must be described as better-compressed or better-conditioned
+supervision, not as access to information absent from Jacobian matching,
+which is established prior art.
+
 ## 13. Implementation roadmap
 
 No item below should be described as implemented until its tests and output
@@ -960,7 +1076,8 @@ schema exist.
 
 1. `src/predictive_geometry/distillation.py`
    - shared-chart packet dataclass and schema validation;
-   - central-difference jet assembly;
+   - central-difference jet assembly for \(G\) and \(L\), and score-moment
+     cubic assembly with the probability-difference form as audit;
    - centered-logit and square-root Jacobian controls;
    - integer \(H^{s_*}\) audit and lower-order roughness diagnostic;
    - metric, first-kind LC, cubic, and raised-connection losses.
