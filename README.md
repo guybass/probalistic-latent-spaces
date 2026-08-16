@@ -36,7 +36,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - `src/predictive_geometry/stability.py`: square-root cubic diagnostics and executable finite-scale Levi--Civita stability bounds, including the metric-compatible transport refinement.
 - `src/predictive_geometry/field.py`: alpha-connection transport, local transport defect, and semantic connection fitting.
 - `src/predictive_geometry/benchmark.py`: held-out semantic quadrilateral benchmark with feasibility, Fisher error, KL/JS error, and transport metric distortion.
-- `src/predictive_geometry/distillation.py`: shared-chart connection packets with score-moment cubics, distillation losses, acceptance gates, checksummed serialization, and the packet-to-connection and packet-to-transport bounds.
+- `src/predictive_geometry/distillation.py`: validated shared-chart connection packets with float64-logit/JVP score-moment cubics, distillation losses, acceptance gates, all-field checksummed serialization, whole-context negative controls, and conditional packet-to-connection and packet-to-transport bounds.
 - `experiments/synthetic_validation.py`: Fisher-sphere and holonomy checks.
 - `experiments/synthetic_connection_recovery.py`: recovers synthetic mixture-, exponential-, and Fisher-generated compositions.
 - `experiments/pythia_cpu_smoke.py`: real Pythia checkpoint inference and curvature on CPU.
@@ -79,7 +79,9 @@ predictive structure to a smaller student through compact \((G,L,C)\) packets on
 shared intervention chart. The packet reconstructs the full Amari connection
 family without aligning hidden dimensions. Output-only, metric-only,
 centered-logit Jacobian, square-root Jacobian, Levi--Civita, full-cubic, and
-connection-scrambled controls are compared at matched student NLL and compute.
+whole-context donor-field controls are compared under a fixed-compute primary
+design and fixed-exposure sensitivity design, with NLL matching or a declared
+behavior--NLL Pareto rule used separately for model selection.
 The separate KL-plus-\(H^s\) route tests the manuscript's vocabulary-independent
 LC transport guarantee while treating lower-order roughness only as a
 heuristic. No distillation result has yet been run.

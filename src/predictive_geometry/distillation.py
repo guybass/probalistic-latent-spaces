@@ -7,21 +7,23 @@ checksummed serialization, and the algebraic packet-to-connection bound
 (Section 11.2) together with the proven packet-to-transport bound
 (Section 11.3).
 
-The module is model-free: a predictive map is any callable ``z -> q(z)``
-returning a categorical distribution on the open simplex, evaluated in
-float64.  The cubic tensor uses the score-moment identity as its primary
-estimator: scores are central differences of ``log q`` recentered by the
-``q``-weighted mean, which removes the softmax gauge exactly, carries no
-inverse-probability factor, and is exact for affine (log-linear) families.
-The probability-difference form is retained only as an independent audit; it
-divides by ``q**2`` and is deliberately left unguarded so that float32
-underflow shows up as a non-finite audit value instead of a silent error.
+The module is model-free. The compatibility entry point accepts a callable
+``z -> q(z)`` and strictly validates the finite open simplex. The preferred
+entry point accepts logits produced in float64 and optionally an exact logit
+Jacobian assembled from JVPs. The cubic tensor uses the score-moment identity:
+scores are logit derivatives recentered by the ``q``-weighted mean, which
+removes the softmax gauge exactly, carries no inverse-probability factor, and
+is exact for affine (log-linear) families. The probability-difference form is
+retained only as an independent audit; it divides by ``q**2`` and may become
+non-finite at numerical extremes without corrupting the primary estimator.
 """
 
 from __future__ import annotations
 
+from collections.abc import Hashable
 from dataclasses import dataclass
 import hashlib
+import json
 import math
 from typing import Callable, Sequence
 
@@ -29,7 +31,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-SCHEMA_VERSION = "pcd-packet-1"
+SCHEMA_VERSION = "pcd-packet-2"
 
 _TRAPEZOID = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
@@ -38,6 +40,8 @@ Matrix = NDArray[np.float64]
 Tensor3 = NDArray[np.float64]
 
 PredictiveMap = Callable[[Vector], Vector]
+LogitMap = Callable[[Vector], Vector]
+LogitJacobianMap = Callable[[Vector], Matrix]
 
 
 @dataclass(frozen=True)
@@ -66,6 +70,7 @@ class ConnectionPacket:
     excluded_outcomes: int
     accepted: bool
     rejection_reason: str
+    serialization_quantization_error: float = 0.0
     schema_version: str = SCHEMA_VERSION
 
 
@@ -76,26 +81,87 @@ def _as_point(z: Sequence[float] | Vector) -> Vector:
     return point
 
 
+def _evaluate_probability_vector(
+    q_fn: PredictiveMap,
+    z: Vector,
+    expected_size: int | None = None,
+) -> Vector:
+    """Evaluate and validate a map into the finite open simplex."""
+
+    q = np.asarray(q_fn(z), dtype=np.float64)
+    if q.ndim != 1 or q.size == 0:
+        raise ValueError("predictive map must return a nonempty one-dimensional vector")
+    if expected_size is not None and q.size != expected_size:
+        raise ValueError("predictive-map outcome dimension changed across the stencil")
+    if not np.all(np.isfinite(q)):
+        raise ValueError("predictive probabilities must be finite")
+    if np.any(q <= 0.0):
+        raise ValueError(
+            "predictive probabilities must lie in the open simplex; use "
+            "build_packet_from_logits to avoid silent probability underflow"
+        )
+    if not np.isclose(float(q.sum()), 1.0, rtol=1e-10, atol=1e-12):
+        raise ValueError("predictive probabilities must sum to one")
+    return q
+
+
+def _evaluate_logits(
+    logits_fn: LogitMap,
+    z: Vector,
+    expected_size: int | None = None,
+) -> Vector:
+    """Evaluate declared float64 logits without silently upgrading a lower dtype."""
+
+    raw = np.asarray(logits_fn(z))
+    if raw.dtype != np.dtype(np.float64):
+        raise TypeError(
+            "logits_fn must return float64 logits from the model evaluation itself; "
+            "casting lower-precision outputs afterward does not restore precision"
+        )
+    logits = np.asarray(raw, dtype=np.float64)
+    if logits.ndim != 1 or logits.size == 0:
+        raise ValueError("logits_fn must return a nonempty one-dimensional vector")
+    if expected_size is not None and logits.size != expected_size:
+        raise ValueError("logit outcome dimension changed across the stencil")
+    if not np.all(np.isfinite(logits)):
+        raise ValueError("logits must be finite")
+    return logits
+
+
+def _softmax_float64(logits: Vector) -> Vector:
+    shifted = logits - float(np.max(logits))
+    weights = np.exp(shifted)
+    probabilities = weights / float(weights.sum())
+    if np.any(probabilities <= 0.0):
+        raise ValueError(
+            "float64 softmax underflowed; reduce the outcome space with a declared "
+            "error bound or supply a higher-precision implementation"
+        )
+    return probabilities
+
+
 def _sqrt_map(q: Vector) -> Vector:
-    return 2.0 * np.sqrt(np.maximum(q, 0.0))
+    return 2.0 * np.sqrt(q)
 
 
 def _jet_tensors(
     q_fn: PredictiveMap,
     z: Vector,
     h: float,
+    score_logits_fn: LogitMap | None = None,
+    score_logit_jacobian_fn: LogitJacobianMap | None = None,
 ) -> tuple[Vector, Matrix, Tensor3, Tensor3, Tensor3, int]:
     """Return ``(q, G, L, C_score, C_audit, excluded)`` at step ``h``.
 
     ``G`` and ``L`` come from central differences of ``psi = 2 sqrt(q)``.
-    ``C_score`` uses recentered central differences of ``log q``; outcomes
-    with a nonpositive probability at any stencil evaluation are excluded
-    from the score sums (their score-weighted contribution is negligible by
-    construction) and counted in ``excluded``.
+    ``C_score`` uses an exact logit Jacobian when supplied, otherwise central
+    differences of logits or, for the probability-only compatibility path,
+    central differences of ``log q``. Invalid or underflowed simplex values
+    are rejected rather than silently excluded.
     """
 
     m = z.shape[0]
-    q0 = np.asarray(q_fn(z), dtype=np.float64)
+    q0 = _evaluate_probability_vector(q_fn, z)
     n = q0.shape[0]
 
     q_plus = np.empty((m, n))
@@ -103,8 +169,8 @@ def _jet_tensors(
     for i in range(m):
         unit = np.zeros(m)
         unit[i] = h
-        q_plus[i] = q_fn(z + unit)
-        q_minus[i] = q_fn(z - unit)
+        q_plus[i] = _evaluate_probability_vector(q_fn, z + unit, n)
+        q_minus[i] = _evaluate_probability_vector(q_fn, z - unit, n)
 
     psi0 = _sqrt_map(q0)
     d_psi = (_sqrt_map(q_plus) - _sqrt_map(q_minus)) / (2.0 * h)
@@ -120,27 +186,37 @@ def _jet_tensors(
             unit_j = np.zeros(m)
             unit_i[i] = h
             unit_j[j] = h
-            pp = _sqrt_map(np.asarray(q_fn(z + unit_i + unit_j), dtype=np.float64))
-            pm = _sqrt_map(np.asarray(q_fn(z + unit_i - unit_j), dtype=np.float64))
-            mp = _sqrt_map(np.asarray(q_fn(z - unit_i + unit_j), dtype=np.float64))
-            mm = _sqrt_map(np.asarray(q_fn(z - unit_i - unit_j), dtype=np.float64))
+            pp = _sqrt_map(_evaluate_probability_vector(q_fn, z + unit_i + unit_j, n))
+            pm = _sqrt_map(_evaluate_probability_vector(q_fn, z + unit_i - unit_j, n))
+            mp = _sqrt_map(_evaluate_probability_vector(q_fn, z - unit_i + unit_j, n))
+            mm = _sqrt_map(_evaluate_probability_vector(q_fn, z - unit_i - unit_j, n))
             d2_psi[i, j] = (pp - pm - mp + mm) / (4.0 * h * h)
             d2_psi[j, i] = d2_psi[i, j]
 
     metric = np.einsum("ia,ja->ij", d_psi, d_psi)
     first_kind = np.einsum("ija,ka->ijk", d2_psi, d_psi)
 
-    included = (q0 > 0.0) & np.all(q_plus > 0.0, axis=0) & np.all(q_minus > 0.0, axis=0)
-    excluded = int(n - np.count_nonzero(included))
+    if score_logit_jacobian_fn is not None:
+        raw_source = np.asarray(score_logit_jacobian_fn(z))
+        if raw_source.dtype != np.dtype(np.float64):
+            raise TypeError("score_logit_jacobian_fn must return float64 values")
+        raw = np.asarray(raw_source, dtype=np.float64)
+        if raw.shape != (m, n) or not np.all(np.isfinite(raw)):
+            raise ValueError("logit Jacobian must be a finite (chart_dim, outcomes) array")
+    elif score_logits_fn is not None:
+        logit_plus = np.empty((m, n))
+        logit_minus = np.empty((m, n))
+        for i in range(m):
+            unit = np.zeros(m)
+            unit[i] = h
+            logit_plus[i] = _evaluate_logits(score_logits_fn, z + unit, n)
+            logit_minus[i] = _evaluate_logits(score_logits_fn, z - unit, n)
+        raw = (logit_plus - logit_minus) / (2.0 * h)
+    else:
+        raw = (np.log(q_plus) - np.log(q_minus)) / (2.0 * h)
 
-    scores = np.zeros((m, n))
-    if np.any(included):
-        log_plus = np.log(q_plus[:, included])
-        log_minus = np.log(q_minus[:, included])
-        raw = (log_plus - log_minus) / (2.0 * h)
-        weights = q0[included]
-        gauge = raw @ weights / np.sum(weights)
-        scores[:, included] = raw - gauge[:, None]
+    gauge = raw @ q0
+    scores = raw - gauge[:, None]
     cubic = np.einsum("a,ia,ja,ka->ijk", q0, scores, scores, scores)
 
     d_q = (q_plus - q_minus) / (2.0 * h)
@@ -149,7 +225,7 @@ def _jet_tensors(
             "ia,ja,ka,a->ijk", d_q, d_q, d_q, 1.0 / np.square(q0)
         )
 
-    return q0, metric, first_kind, cubic, cubic_audit, excluded
+    return q0, metric, first_kind, cubic, cubic_audit, 0
 
 
 def _max_relative_difference(
@@ -170,6 +246,8 @@ def build_packet(
     *,
     metric_floor: float = 1e-10,
     refinement_rtol: float = 1e-3,
+    score_logits_fn: LogitMap | None = None,
+    score_logit_jacobian_fn: LogitJacobianMap | None = None,
 ) -> ConnectionPacket:
     """Assemble and gate a connection packet at one chart point.
 
@@ -184,8 +262,23 @@ def build_packet(
 
     point = _as_point(z)
     h = float(step)
+    if not math.isfinite(h) or h <= 0.0:
+        raise ValueError("step must be finite and positive")
+    if not math.isfinite(metric_floor) or metric_floor <= 0.0:
+        raise ValueError("metric_floor must be finite and positive")
+    if not math.isfinite(refinement_rtol) or refinement_rtol < 0.0:
+        raise ValueError("refinement_rtol must be finite and nonnegative")
 
-    levels = [_jet_tensors(q_fn, point, h / factor) for factor in (1.0, 2.0, 4.0)]
+    levels = [
+        _jet_tensors(
+            q_fn,
+            point,
+            h / factor,
+            score_logits_fn=score_logits_fn,
+            score_logit_jacobian_fn=score_logit_jacobian_fn,
+        )
+        for factor in (1.0, 2.0, 4.0)
+    ]
     q0 = levels[0][0]
 
     def extrapolate(coarse_index: int, fine_index: int) -> list[Tensor3]:
@@ -206,13 +299,17 @@ def build_packet(
     cubic_audit = levels[2][4]
     excluded = max(level[5] for level in levels)
 
-    eigenvalues = np.linalg.eigvalsh(metric)
-
-    accepted = True
-    reason = ""
     primary_finite = all(
         np.all(np.isfinite(block)) for block in (metric, first_kind, cubic)
     )
+    eigenvalues = (
+        np.linalg.eigvalsh(metric)
+        if primary_finite
+        else np.full(point.size, np.nan, dtype=np.float64)
+    )
+
+    accepted = True
+    reason = ""
     if not primary_finite:
         accepted = False
         reason = "nonfinite"
@@ -239,6 +336,37 @@ def build_packet(
     )
 
 
+def build_packet_from_logits(
+    logits_fn: LogitMap,
+    z: Sequence[float] | Vector,
+    step: float,
+    *,
+    logit_jacobian_fn: LogitJacobianMap | None = None,
+    metric_floor: float = 1e-10,
+    refinement_rtol: float = 1e-3,
+) -> ConnectionPacket:
+    """Build a packet from float64 logits, with optional exact logit JVPs.
+
+    This is the preferred precision-safe entry point. ``logits_fn`` must
+    return logits produced in float64; a lower-precision result cast to
+    float64 before returning cannot be detected and violates the contract.
+    ``logit_jacobian_fn(z)`` returns a ``(chart_dim, outcomes)`` array.
+    """
+
+    def q_fn(point: Vector) -> Vector:
+        return _softmax_float64(_evaluate_logits(logits_fn, point))
+
+    return build_packet(
+        q_fn,
+        z,
+        step,
+        metric_floor=metric_floor,
+        refinement_rtol=refinement_rtol,
+        score_logits_fn=logits_fn,
+        score_logit_jacobian_fn=logit_jacobian_fn,
+    )
+
+
 def alpha_connection(
     metric: Matrix,
     first_kind: Tensor3,
@@ -252,12 +380,24 @@ def alpha_connection(
     return np.einsum("lk,ijk->lij", inverse_metric, lower)
 
 
-def tensor_operator_norm(tensor: Tensor3) -> float:
-    """Spectral norm of the first-index flattening, compatible with
-    contraction by a matrix on the first index."""
+def tensor_operator_norm(tensor: Tensor3, output_axis: int = 0) -> float:
+    """Spectral norm after unfolding the index acted on by a matrix.
 
-    m = tensor.shape[0]
-    return float(np.linalg.norm(tensor.reshape(m, -1), 2))
+    Raised connection tensors ``Gamma[l, i, j]`` use ``output_axis=0``.
+    Lowered tensors ``L[i, j, k]`` and ``C[i, j, k]`` are raised by acting on
+    their final index and therefore require ``output_axis=2``. With this
+    convention ``||A T|| <= ||A||_2 ||T||`` holds for the contraction used by
+    :func:`alpha_connection`.
+    """
+
+    array = np.asarray(tensor, dtype=np.float64)
+    if array.ndim != 3:
+        raise ValueError("tensor must have three indices")
+    axis = int(output_axis)
+    if output_axis != axis or axis not in (0, 1, 2):
+        raise ValueError("output_axis must be 0, 1, or 2")
+    unfolded = np.moveaxis(array, axis, 0)
+    return float(np.linalg.norm(unfolded.reshape(unfolded.shape[0], -1), 2))
 
 
 def packet_connection_bound(
@@ -269,7 +409,26 @@ def packet_connection_bound(
     first_kind_bound: float,
     cubic_bound: float,
 ) -> float:
-    """Section 11.2 algebraic packet-to-connection bound."""
+    """Section 11.2 algebraic packet-to-connection bound.
+
+    The first-kind and cubic inputs must use a norm compatible with raising
+    their final covariant index, such as
+    ``tensor_operator_norm(tensor, output_axis=2)``. Connection defects use
+    ``output_axis=0`` after the raised index has moved to the front.
+    """
+
+    scalars = (
+        metric_floor,
+        metric_defect,
+        first_kind_defect,
+        cubic_defect,
+        first_kind_bound,
+        cubic_bound,
+    )
+    if not all(math.isfinite(float(value)) for value in scalars) or not math.isfinite(alpha):
+        raise ValueError("bound inputs must be finite")
+    if metric_floor <= 0.0 or any(value < 0.0 for value in scalars[1:]):
+        raise ValueError("metric floor must be positive and norm bounds nonnegative")
 
     lowered = first_kind_defect + 0.5 * abs(alpha) * cubic_defect
     inflation = first_kind_bound + 0.5 * abs(alpha) * cubic_bound
@@ -289,8 +448,23 @@ def packet_transport_bound(
     """Section 11.3 proven packet-to-transport bound.
 
     ``L_gamma * exp((M_T + M_S) L_gamma) * (delta_pack + (H_T + H_S) h^rho)``
-    with all constants audited on the declared chart.
+    with continuum constants supplied by a certificate, or clearly labeled
+    empirical grid estimates when no such certificate is available.
     """
+
+    nonnegative = (
+        path_length,
+        sup_teacher,
+        sup_student,
+        packet_defect,
+        holder_teacher,
+        holder_student,
+        fill_distance,
+    )
+    if not all(math.isfinite(float(value)) and value >= 0.0 for value in nonnegative):
+        raise ValueError("transport-bound inputs must be finite and nonnegative")
+    if not math.isfinite(holder_exponent) or not 0.0 < holder_exponent <= 1.0:
+        raise ValueError("holder_exponent must lie in (0, 1]")
 
     interpolation = (holder_teacher + holder_student) * fill_distance**holder_exponent
     growth = math.exp((sup_teacher + sup_student) * path_length)
@@ -424,49 +598,132 @@ def sufficiency_decomposition(
 
 def context_shuffled_cubics(
     cubics: Sequence[Tensor3],
-    strata: Sequence[int],
+    strata: Sequence[Hashable],
+    context_ids: Sequence[Hashable],
+    chart_keys: Sequence[Hashable],
+    *,
+    seed: int = 0,
 ) -> list[Tensor3]:
-    """Section 7 negative control: roll cubic targets within each stratum.
+    """Shuffle complete donor-context cubic fields within conditioning strata.
 
-    Every packet in a stratum of size at least two receives a donor cubic
-    from a different packet of the same stratum; singleton strata keep their
-    own tensor and should be avoided by the stratification design.
+    All packets belonging to one context are assigned to one *different*
+    donor context in the same stratum, and tensors are copied at matching
+    ``chart_keys``. Context blocks must have identical chart-key sets. This
+    preserves the donor field as a coherent sampled field instead of creating
+    the discontinuous per-packet scramble rejected by Section 7.
+
+    The resulting cubic field is realized by the teacher in the donor context.
+    Its combination with the recipient's retained ``(G, L)`` is not guaranteed
+    to be the jet of any single predictive map; achieved loss floors must still
+    be compared before interpreting the control.
     """
 
-    labels = np.asarray(strata)
-    shuffled: list[Tensor3] = [np.array(c, copy=True) for c in cubics]
-    for stratum in np.unique(labels):
-        indices = np.flatnonzero(labels == stratum)
-        if indices.size < 2:
-            continue
-        rolled = np.roll(indices, 1)
-        for target, donor in zip(indices, rolled):
-            shuffled[target] = np.array(cubics[donor], copy=True)
+    count = len(cubics)
+    if not (len(strata) == len(context_ids) == len(chart_keys) == count):
+        raise ValueError("cubics, strata, context_ids, and chart_keys must align")
+    if count == 0:
+        return []
+    reference_shape = np.asarray(cubics[0]).shape
+    if len(reference_shape) != 3 or any(
+        np.asarray(cubic).shape != reference_shape
+        or not np.all(np.isfinite(np.asarray(cubic)))
+        for cubic in cubics
+    ):
+        raise ValueError("cubics must be finite three-tensors with one shared shape")
+
+    context_indices: dict[Hashable, list[int]] = {}
+    context_strata: dict[Hashable, Hashable] = {}
+    for index, (stratum, context, key) in enumerate(
+        zip(strata, context_ids, chart_keys)
+    ):
+        try:
+            hash(stratum)
+            hash(context)
+            hash(key)
+        except TypeError as error:
+            raise ValueError("strata, context IDs, and chart keys must be hashable") from error
+        if context in context_strata and context_strata[context] != stratum:
+            raise ValueError("every context must belong to exactly one stratum")
+        context_strata[context] = stratum
+        context_indices.setdefault(context, []).append(index)
+
+    key_maps: dict[Hashable, dict[Hashable, int]] = {}
+    for context, indices in context_indices.items():
+        mapping: dict[Hashable, int] = {}
+        for index in indices:
+            key = chart_keys[index]
+            if key in mapping:
+                raise ValueError("chart keys must be unique within each context")
+            mapping[key] = index
+        key_maps[context] = mapping
+
+    contexts_by_stratum: dict[Hashable, list[Hashable]] = {}
+    for context in context_indices:
+        contexts_by_stratum.setdefault(context_strata[context], []).append(context)
+
+    shuffled: list[Tensor3] = [np.array(cubic, copy=True) for cubic in cubics]
+    rng = np.random.default_rng(seed)
+    for stratum, contexts in contexts_by_stratum.items():
+        if len(contexts) < 2:
+            raise ValueError(
+                f"stratum {stratum!r} has fewer than two contexts; "
+                "a non-self donor control is impossible"
+            )
+        order = [contexts[i] for i in rng.permutation(len(contexts))]
+        donors = order[-1:] + order[:-1]
+        reference_keys = set(key_maps[order[0]])
+        if any(set(key_maps[context]) != reference_keys for context in order[1:]):
+            raise ValueError("all context blocks in a stratum must share chart keys")
+        for recipient, donor in zip(order, donors):
+            for key, target_index in key_maps[recipient].items():
+                donor_index = key_maps[donor][key]
+                shuffled[target_index] = np.array(cubics[donor_index], copy=True)
     return shuffled
 
 
-def _payload_arrays(packet: ConnectionPacket) -> list[NDArray[np.float32]]:
+def _payload_arrays(packet: ConnectionPacket) -> list[NDArray]:
     return [
         packet.z.astype(np.float32),
-        packet.q.astype(np.float32),
+        # The geometric sidecar is float32. Keep the output anchor in float64
+        # so rare positive probabilities cannot become exact zeros on disk.
+        packet.q.astype(np.float64),
         packet.metric.astype(np.float32),
         packet.first_kind.astype(np.float32),
         packet.cubic.astype(np.float32),
+        packet.cubic_audit.astype(np.float32),
     ]
 
 
-def _payload_checksum(arrays: Sequence[NDArray[np.float32]]) -> str:
+def _packet_checksum(body: dict) -> str:
+    """Checksum the complete canonical packet body, including audit metadata."""
+
     digest = hashlib.blake2b(digest_size=16, person=b"pcdpack")
-    for array in arrays:
-        digest.update(np.ascontiguousarray(array).tobytes())
+    canonical = json.dumps(
+        body,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=True,
+    ).encode("utf-8")
+    digest.update(canonical)
     return digest.hexdigest()
 
 
-def packet_to_dict(packet: ConnectionPacket) -> dict:
-    """Serialize with float32 payload, float64 audit summary, and checksum."""
+def packet_to_dict(
+    packet: ConnectionPacket,
+    *,
+    max_quantization_error: float = 1e-6,
+) -> dict:
+    """Serialize float32 geometry, a float64 output anchor, and all-field checksum."""
 
+    if packet.schema_version != SCHEMA_VERSION:
+        raise ValueError("packet schema version does not match this writer")
+    if not math.isfinite(max_quantization_error) or max_quantization_error < 0.0:
+        raise ValueError("max_quantization_error must be finite and nonnegative")
+    measured_quantization_error = quantization_error(packet)
+    if measured_quantization_error > max_quantization_error:
+        raise ValueError("float32 packet quantization exceeds the declared tolerance")
     payload = _payload_arrays(packet)
-    return {
+    body = {
         "schema_version": packet.schema_version,
         "step": packet.step,
         "z": payload[0].tolist(),
@@ -474,42 +731,99 @@ def packet_to_dict(packet: ConnectionPacket) -> dict:
         "metric": payload[2].tolist(),
         "first_kind": payload[3].tolist(),
         "cubic": payload[4].tolist(),
+        "cubic_audit": payload[5].tolist(),
         "metric_eigenvalues": packet.metric_eigenvalues.tolist(),
         "refinement_error": packet.refinement_error,
         "excluded_outcomes": packet.excluded_outcomes,
         "accepted": packet.accepted,
         "rejection_reason": packet.rejection_reason,
-        "checksum": _payload_checksum(payload),
+        "serialization_quantization_error": measured_quantization_error,
     }
+    return {**body, "checksum": _packet_checksum(body)}
 
 
 def packet_from_dict(data: dict) -> ConnectionPacket:
-    """Deserialize, validating schema version and payload checksum."""
+    """Deserialize, validating the checksum, shapes, and packet invariants."""
 
     if data.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported packet schema version")
+    body = {key: value for key, value in data.items() if key != "checksum"}
+    if _packet_checksum(body) != data.get("checksum"):
+        raise ValueError("packet checksum mismatch")
     arrays = [
         np.asarray(data["z"], dtype=np.float32),
-        np.asarray(data["q"], dtype=np.float32),
+        np.asarray(data["q"], dtype=np.float64),
         np.asarray(data["metric"], dtype=np.float32),
         np.asarray(data["first_kind"], dtype=np.float32),
         np.asarray(data["cubic"], dtype=np.float32),
+        np.asarray(data["cubic_audit"], dtype=np.float32),
     ]
-    if _payload_checksum(arrays) != data.get("checksum"):
-        raise ValueError("packet checksum mismatch")
+    z, q, metric, first_kind, cubic, cubic_audit = arrays
+    if z.ndim != 1 or z.size == 0 or q.ndim != 1 or q.size == 0:
+        raise ValueError("invalid serialized point or probability shape")
+    m = z.size
+    if metric.shape != (m, m) or any(
+        block.shape != (m, m, m) for block in (first_kind, cubic, cubic_audit)
+    ):
+        raise ValueError("serialized geometric tensor shapes are inconsistent")
+    accepted = bool(data["accepted"])
+    rejection_reason = str(data["rejection_reason"])
+    primary_finite = all(
+        np.all(np.isfinite(block)) for block in (z, q, metric, first_kind, cubic)
+    )
+    if accepted and not primary_finite:
+        raise ValueError("an accepted packet must have finite primary values")
+    if not primary_finite and rejection_reason != "nonfinite":
+        raise ValueError("nonfinite packet values require the nonfinite rejection reason")
+    if np.any(q <= 0.0) or not np.isclose(float(q.sum()), 1.0, rtol=1e-6, atol=1e-7):
+        raise ValueError("serialized probabilities must lie in the open simplex")
+
+    step = float(data["step"])
+    refinement_error = float(data["refinement_error"])
+    excluded_outcomes = int(data["excluded_outcomes"])
+    serialization_quantization_error = float(data["serialization_quantization_error"])
+    if not math.isfinite(step) or step <= 0.0:
+        raise ValueError("serialized step must be finite and positive")
+    if not math.isfinite(refinement_error) or refinement_error < 0.0:
+        raise ValueError("serialized refinement error must be finite and nonnegative")
+    if excluded_outcomes < 0:
+        raise ValueError("serialized excluded-outcome count must be nonnegative")
+    if (
+        not math.isfinite(serialization_quantization_error)
+        or serialization_quantization_error < 0.0
+    ):
+        raise ValueError("serialized quantization error must be finite and nonnegative")
+
+    eigenvalues = np.asarray(data["metric_eigenvalues"], dtype=np.float64)
+    recomputed = (
+        np.linalg.eigvalsh(metric.astype(np.float64))
+        if np.all(np.isfinite(metric))
+        else np.full(m, np.nan)
+    )
+    if eigenvalues.shape != (m,):
+        raise ValueError("serialized metric eigenvalues are invalid")
+    if not np.allclose(eigenvalues, recomputed, rtol=1e-5, atol=1e-7, equal_nan=True):
+        raise ValueError("serialized metric eigenvalues disagree with the metric")
+
+    if accepted and rejection_reason:
+        raise ValueError("an accepted packet cannot have a rejection reason")
+    if not accepted and not rejection_reason:
+        raise ValueError("a rejected packet must retain its rejection reason")
+
     return ConnectionPacket(
-        z=arrays[0].astype(np.float64),
-        step=float(data["step"]),
-        q=arrays[1].astype(np.float64),
-        metric=arrays[2].astype(np.float64),
-        first_kind=arrays[3].astype(np.float64),
-        cubic=arrays[4].astype(np.float64),
-        cubic_audit=np.full_like(arrays[4].astype(np.float64), np.nan),
-        metric_eigenvalues=np.asarray(data["metric_eigenvalues"], dtype=np.float64),
-        refinement_error=float(data["refinement_error"]),
-        excluded_outcomes=int(data["excluded_outcomes"]),
-        accepted=bool(data["accepted"]),
-        rejection_reason=str(data["rejection_reason"]),
+        z=z.astype(np.float64),
+        step=step,
+        q=q.astype(np.float64),
+        metric=metric.astype(np.float64),
+        first_kind=first_kind.astype(np.float64),
+        cubic=cubic.astype(np.float64),
+        cubic_audit=cubic_audit.astype(np.float64),
+        metric_eigenvalues=eigenvalues,
+        refinement_error=refinement_error,
+        excluded_outcomes=excluded_outcomes,
+        accepted=accepted,
+        rejection_reason=rejection_reason,
+        serialization_quantization_error=serialization_quantization_error,
     )
 
 

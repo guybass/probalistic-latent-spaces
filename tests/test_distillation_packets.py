@@ -19,6 +19,7 @@ from predictive_geometry.distillation import (
     ConnectionPacket,
     alpha_connection,
     build_packet,
+    build_packet_from_logits,
     centered_logit_jacobian_loss,
     context_shuffled_cubics,
     levi_civita_loss,
@@ -165,20 +166,79 @@ class TestCubicEstimators(unittest.TestCase):
         self.assertGreater(audit_error, 1e-6)
         self.assertGreater(audit_error, 1e4 * score_error)
 
-    def test_probability_form_not_finite_under_float32_underflow(self):
+    def test_logit_path_prevents_silent_probability_underflow(self):
         logit_offsets = np.array([0.0, -1.0, -2.0, -120.0])
+        slopes = np.array([1.0, 0.5, -0.5, 2.0])
 
         def q_fn(z):
             value = float(np.atleast_1d(z)[0])
-            logits = logit_offsets + np.array([1.0, 0.5, -0.5, 2.0]) * value
+            logits = logit_offsets + slopes * value
             exact = softmax(logits)
             return np.float64(np.float32(exact))
 
-        packet = build_packet(q_fn, [0.1], 1e-2)
+        with self.assertRaisesRegex(ValueError, "open simplex"):
+            build_packet(q_fn, [0.1], 1e-2)
+
+        def logits_fn(z):
+            value = float(np.atleast_1d(z)[0])
+            return np.asarray(logit_offsets + slopes * value, dtype=np.float64)
+
+        packet = build_packet_from_logits(logits_fn, [0.1], 1e-2)
         self.assertTrue(packet.accepted)
         self.assertTrue(np.all(np.isfinite(packet.cubic)))
-        self.assertFalse(np.all(np.isfinite(packet.cubic_audit)))
-        self.assertGreaterEqual(packet.excluded_outcomes, 1)
+        probabilities = softmax(logit_offsets + slopes * 0.1)
+        centered = slopes - probabilities @ slopes
+        exact_cubic = probabilities @ np.power(centered, 3)
+        self.assertAlmostEqual(packet.cubic[0, 0, 0], exact_cubic, places=11)
+        self.assertEqual(packet.excluded_outcomes, 0)
+
+    def test_logit_path_rejects_posthoc_float32_cast(self):
+        def logits_fn(z):
+            return np.array([float(z[0]), 0.0], dtype=np.float32)
+
+        with self.assertRaisesRegex(TypeError, "float64 logits"):
+            build_packet_from_logits(logits_fn, [0.1], 1e-2)
+
+    def test_logit_score_path_is_softmax_gauge_invariant(self):
+        slopes = np.array([1.0, 0.2, -0.7, 0.4])
+        offsets = np.array([0.3, -0.1, 0.2, -0.4])
+
+        def base(z):
+            return np.asarray(offsets + slopes * float(z[0]), dtype=np.float64)
+
+        def gauged(z):
+            value = float(z[0])
+            scalar = 3.0 * value * value + math.sin(value)
+            return np.asarray(base(z) + scalar, dtype=np.float64)
+
+        original = build_packet_from_logits(base, [0.2], 1e-3)
+        shifted = build_packet_from_logits(gauged, [0.2], 1e-3)
+        np.testing.assert_allclose(shifted.q, original.q, atol=1e-14)
+        np.testing.assert_allclose(shifted.metric, original.metric, atol=1e-9)
+        np.testing.assert_allclose(shifted.first_kind, original.first_kind, atol=1e-7)
+        np.testing.assert_allclose(shifted.cubic, original.cubic, atol=1e-10)
+
+    def test_exact_logit_jvp_is_used_for_nonlinear_scores(self):
+        slopes = np.array([1.0, 0.2, -0.7, 0.4])
+        curvature = np.array([0.3, -0.2, 0.1, 0.5])
+
+        def logits_fn(z):
+            value = float(z[0])
+            return np.asarray(slopes * value + curvature * value * value, dtype=np.float64)
+
+        def jacobian_fn(z):
+            value = float(z[0])
+            return np.asarray([slopes + 2.0 * curvature * value], dtype=np.float64)
+
+        point = 0.4
+        packet = build_packet_from_logits(
+            logits_fn, [point], 5e-2, logit_jacobian_fn=jacobian_fn
+        )
+        probabilities = softmax(logits_fn([point]))
+        derivative = slopes + 2.0 * curvature * point
+        centered = derivative - probabilities @ derivative
+        exact_cubic = probabilities @ np.power(centered, 3)
+        self.assertAlmostEqual(packet.cubic[0, 0, 0], exact_cubic, places=12)
 
 
 class TestLossesAndControls(unittest.TestCase):
@@ -222,18 +282,33 @@ class TestLossesAndControls(unittest.TestCase):
         self.assertGreaterEqual(mismatch, 0.0)
         self.assertAlmostEqual(total, insufficiency + mismatch, places=12)
 
-    def test_context_shuffled_cubics_move_within_strata(self):
-        rng = np.random.default_rng(31)
-        cubics = [rng.normal(size=(2, 2, 2)) for _ in range(5)]
-        strata = [0, 0, 0, 1, 1]
-        shuffled = context_shuffled_cubics(cubics, strata)
-        for index in range(5):
-            self.assertFalse(np.allclose(shuffled[index], cubics[index]))
-        for stratum in (0, 1):
-            indices = [i for i, s in enumerate(strata) if s == stratum]
-            originals = sorted(float(cubics[i].sum()) for i in indices)
-            replaced = sorted(float(shuffled[i].sum()) for i in indices)
-            np.testing.assert_allclose(originals, replaced)
+    def test_context_shuffled_cubics_move_complete_context_blocks(self):
+        contexts = ["a", "a", "b", "b", "c", "c", "d", "d"]
+        keys = [0, 1] * 4
+        strata = [0, 0, 0, 0, 1, 1, 1, 1]
+        context_value = {"a": 10.0, "b": 20.0, "c": 30.0, "d": 40.0}
+        cubics = [
+            np.full((2, 2, 2), context_value[context] + key)
+            for context, key in zip(contexts, keys)
+        ]
+        shuffled = context_shuffled_cubics(
+            cubics, strata, contexts, keys, seed=31
+        )
+        for recipient in ("a", "b", "c", "d"):
+            indices = [i for i, context in enumerate(contexts) if context == recipient]
+            received = [float(shuffled[i][0, 0, 0]) for i in indices]
+            possible_donors = (
+                ("a", "b") if recipient in ("a", "b") else ("c", "d")
+            )
+            possible_donors = [donor for donor in possible_donors if donor != recipient]
+            self.assertEqual(len(possible_donors), 1)
+            donor = possible_donors[0]
+            self.assertEqual(received, [context_value[donor], context_value[donor] + 1.0])
+
+    def test_context_shuffle_rejects_singleton_stratum(self):
+        cubics = [np.zeros((1, 1, 1))]
+        with self.assertRaisesRegex(ValueError, "fewer than two contexts"):
+            context_shuffled_cubics(cubics, [0], ["only"], [0])
 
 
 class TestBounds(unittest.TestCase):
@@ -263,13 +338,29 @@ class TestBounds(unittest.TestCase):
             bound = packet_connection_bound(
                 floor,
                 np.linalg.norm(student_metric - teacher_metric, 2),
-                tensor_operator_norm(student_first - teacher_first),
-                tensor_operator_norm(student_cubic - teacher_cubic),
+                tensor_operator_norm(student_first - teacher_first, output_axis=2),
+                tensor_operator_norm(student_cubic - teacher_cubic, output_axis=2),
                 alpha,
-                tensor_operator_norm(teacher_first),
-                tensor_operator_norm(teacher_cubic),
+                tensor_operator_norm(teacher_first, output_axis=2),
+                tensor_operator_norm(teacher_cubic, output_axis=2),
             )
             self.assertLessEqual(defect, bound)
+
+    def test_packet_bound_raises_the_actual_covariant_index(self):
+        defect_lowered = np.array(
+            [
+                [[-0.52751, -0.41890, 0.73323], [-0.95448, 0.73694, -1.87282], [0.38810, -0.20251, 0.58199]],
+                [[-0.95448, 0.73694, -1.87282], [0.55634, 0.36346, -0.33914], [0.35421, -0.26740, 0.61776]],
+                [[0.38810, -0.20251, 0.58199], [0.35421, -0.26740, 0.61776], [1.96366, -0.21166, 1.03607]],
+            ]
+        )
+        gamma_defect = np.einsum("lk,ijk->lij", np.eye(3), defect_lowered)
+        direct = tensor_operator_norm(gamma_defect, output_axis=0)
+        wrong_unfolding = tensor_operator_norm(defect_lowered, output_axis=0)
+        compatible = tensor_operator_norm(defect_lowered, output_axis=2)
+        self.assertGreater(direct, wrong_unfolding)
+        bound = packet_connection_bound(1.0, 0.0, compatible, 0.0, 0.0, 0.0, 0.0)
+        self.assertLessEqual(direct, bound + 1e-12)
 
     def test_transport_bound_dominates_exact_defect(self):
         offset_teacher = 0.8
@@ -387,6 +478,25 @@ class TestAuditsAndGates(unittest.TestCase):
         self.assertFalse(packet.accepted)
         self.assertEqual(packet.rejection_reason, "refinement")
 
+    def test_packet_builder_rejects_invalid_simplex_maps(self):
+        def negative(z):
+            value = float(z[0])
+            return np.array([0.5 + 0.1 * value, 0.6 - 0.05 * value, -0.1 - 0.05 * value])
+
+        def unnormalized(z):
+            value = float(z[0])
+            return np.array([0.7 + 0.1 * value, 0.7 - 0.1 * value])
+
+        for q_fn in (negative, unnormalized):
+            with self.assertRaises(ValueError):
+                build_packet(q_fn, [0.2], 1e-3)
+
+    def test_packet_builder_rejects_invalid_numerical_contract(self):
+        q_fn = affine_family(np.array([[0.0], [1.0], [-1.0]]))
+        for step in (0.0, -1.0, math.inf):
+            with self.assertRaises(ValueError):
+                build_packet(q_fn, [0.2], step)
+
     def test_serialization_roundtrip_and_checksum(self):
         rng = np.random.default_rng(47)
         packet = build_packet(affine_family(rng.normal(size=(6, 2))), [0.1, -0.1], 1e-3)
@@ -395,9 +505,33 @@ class TestAuditsAndGates(unittest.TestCase):
         self.assertIsInstance(restored, ConnectionPacket)
         np.testing.assert_allclose(restored.metric, packet.metric, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(restored.cubic, packet.cubic, rtol=1e-6, atol=1e-6)
+        np.testing.assert_allclose(
+            restored.cubic_audit, packet.cubic_audit, rtol=1e-6, atol=1e-6
+        )
         self.assertLess(quantization_error(packet), 1e-6)
+        self.assertAlmostEqual(
+            restored.serialization_quantization_error,
+            payload["serialization_quantization_error"],
+        )
         payload["metric"][0][0] += 1.0
         with self.assertRaises(ValueError):
+            packet_from_dict(payload)
+
+        metadata_payload = packet_to_dict(packet)
+        metadata_payload["accepted"] = not metadata_payload["accepted"]
+        with self.assertRaisesRegex(ValueError, "checksum"):
+            packet_from_dict(metadata_payload)
+
+    def test_serialization_enforces_quantization_tolerance(self):
+        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        with self.assertRaisesRegex(ValueError, "quantization"):
+            packet_to_dict(packet, max_quantization_error=0.0)
+
+    def test_serialization_rejects_wrong_schema(self):
+        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        payload = packet_to_dict(packet)
+        payload["schema_version"] = "pcd-packet-obsolete"
+        with self.assertRaisesRegex(ValueError, "schema"):
             packet_from_dict(payload)
 
 

@@ -614,7 +614,9 @@ Before packet generation, freeze:
 4. Reject nonconvergent or rank-deficient packets according to the frozen gates.
 5. Audit the teacher \(H^{s_*}\) norm or declare the lower-order roughness
    quantity to be heuristic only.
-6. Serialize accepted packets in float32 and retain float64 audit summaries.
+6. Serialize the geometric sidecar in float32, retain the output anchor in
+   float64 unless a separately error-bounded compression is declared, and
+   retain float64 audit summaries.
 7. Regenerate a random 1% sample and require checksum and tolerance agreement.
 
 ### Phase 2: output-distillation warm start
@@ -665,11 +667,18 @@ connection defect, and transport commutators without further tuning.
 
 ## 7. Matched experimental arms
 
-Every arm starts from the same student initialization for a given seed and sees
-the same examples in the same order. All arms share the same chart stencil
-exposure through the output anchor (Section 4.1); residual per-point compute
-differences from JVP evaluation in the geometric arms are governed by the
-NLL-matched or Pareto budget rule and must be reported.
+Every arm starts from the same student initialization for a given seed. All
+arms share the same chart stencil exposure through the output anchor (Section
+4.1). The **primary fixed-compute estimand** gives every arm the same
+preregistered student-training FLOP or wall-time budget, counts forward,
+backward, JVP, and ODE work, and feeds each arm the longest prefix it can process
+from the same frozen example order. The number of processed examples is then an
+outcome of the compute constraint and must be reported. A secondary
+fixed-exposure sensitivity run gives every arm the same examples and steps and
+reports the resulting compute difference. Offline teacher packet construction
+is shared once across arms and reported separately. NLL matching and the
+behavior--NLL Pareto rule govern model selection; neither substitutes for
+compute matching.
 
 | Arm | Objective beyond data NLL | Question |
 |---|---|---|
@@ -680,7 +689,7 @@ NLL-matched or Pareto budget rule and must be reported.
 | D2 | output KD + \(G\) | does local Fisher sensitivity add value? |
 | D3 | output KD + \((G,L)\) | does densified metric-derivative information add value beyond sparse \(G\)? |
 | D4 | output KD + \((G,L,C)\) | does the metric-independent cubic tensor add value beyond LC? |
-| D5 | output KD + \((G,L)\) + context-shuffled teacher cubic target | does the correctly oriented cubic tensor matter beyond its scale and realizability? |
+| D5 | output KD + \((G,L)\) + context-shuffled teacher cubic target | does the correctly oriented cubic tensor matter beyond donor-field scale, subject to an explicit feasibility check? |
 | D6 | D4 + integrated path loss | does explicit transport improve over pointwise packet matching? |
 
 Use **Jpsi** as the machine-readable arm name while writing it as
@@ -693,11 +702,16 @@ For D5, keep the \(G_T\) and \(L_T\) targets intact and replace the cubic
 target at each packet with the teacher's own cubic tensor drawn from a
 different, preregistered donor context: shuffle \(C_T\) between context
 blocks within preregistered strata of matched Fisher conditioning and metric
-scale, holding the assignment fixed per seed. The donor tensors are smooth
-along each donor chart, realizable as actual teacher jets, and norm-matched
-in distribution by the stratification, but their orientation is wrong for the
-recipient context. This context-shuffled field is the primary negative
-control.
+scale, holding the assignment fixed per seed. Tensors are moved as complete
+context blocks at matching chart coordinates, so each donor cubic field is
+smooth along its original teacher chart and norm-matched in distribution by
+the stratification. Each donor \(C_T\) is an actual teacher tensor, but the
+composite target that retains the recipient's \((G_T,L_T)\) and inserts the
+donor's \(C_T\) is **not guaranteed to be jointly realizable by one predictive
+map**. D5 is therefore a coherent donor-field negative control, not a
+realizability control. It supports the \(D4-D5\) orientation contrast only when
+the active geometric losses attain comparable floors; otherwise the contrast
+is labeled infeasible rather than counted as evidence for D4.
 
 A per-packet Fisher-orthogonal scramble --- drawing \(R\) with
 \(R^\top G_TR=G_T\) independently at each packet point and transforming every
@@ -1063,18 +1077,24 @@ Three remarks make the bound operational.
 2. **Levi--Civita sharpening.** For \(\alpha=0\) the paper's
    metric-compatible transport bound replaces the exponential growth factor
    by its sharper metric-compatible counterpart.
-3. **Audited constants.** \(M_M\) and \(H_M\) are reported as audited
-   quantities: sup norms and finite-difference Hölder quotients of the
-   connection fields over the packet grid, with declared safety margins. The
-   audited \(H^{s_*}\) envelope of Section 4.3 with the spectral floor
-   supplies \(C^\rho\) control in principle, but the bound is evaluated from
-   the directly measured \(M_M,H_M\), not from embedding constants.
+3. **Certified versus sampled constants.** The proposition assumes continuum
+   upper bounds \(M_M,H_M\). Maxima and finite-difference Hölder quotients on a
+   packet grid are empirical diagnostics and generally underestimate the true
+   suprema; an arbitrary safety margin does not turn them into upper bounds.
+   They may be inserted into the formula only as an empirical interpolation
+   diagnostic. A theorem-grade certificate requires an architectural or
+   analytic modulus bound, or a certified \(H^{s_*}\) envelope and spectral
+   floor. The unresolved surrogate-residual problem in Section 11.4 therefore
+   limits both the risk--regularity route and any attempt to certify these
+   Hölder constants from samples.
 
-Without the sampling term, small packet loss says nothing about a path
-running between packet points; with it, packet loss, fill distance, and the
-audited moduli convert into an explicit transport guarantee. The bound and a
-numerical verification against exactly integrated transport are implemented
-in `src/predictive_geometry/distillation.py` and
+Without the sampling term, small packet loss says nothing about a path running
+between packet points. With certified moduli, packet loss and fill distance
+give the displayed conditional transport certificate. With sampled moduli,
+the same formula is an empirical diagnostic that must be checked against
+independently refined integrated transport and must not be called a guarantee.
+The formula and an analytic-fixture verification against exactly integrated
+transport are implemented in `src/predictive_geometry/distillation.py` and
 `tests/test_distillation_packets.py`.
 
 ### 11.4 Remaining open target: certified surrogate residual
@@ -1142,10 +1162,12 @@ schema exist. Under this rule, items 1 and 5 are implemented; items 2--4 are
 not.
 
 1. `src/predictive_geometry/distillation.py` --- **implemented**:
-   - shared-chart packet dataclass with checksummed float32 serialization
-     and schema-version validation;
-   - central-difference jet assembly for \(G\) and \(L\), and score-moment
-     cubic assembly with the probability-difference form as audit;
+   - shared-chart packet dataclass with checksummed float32 geometric tensors,
+     a float64 output anchor, checksummed audit metadata, invariant checks, and
+     schema-version validation;
+   - central-difference jet assembly for \(G\) and \(L\), strict open-simplex
+     validation, and score-moment cubic assembly from float64 logits or exact
+     logit JVPs, with the probability-difference form as audit;
    - Richardson-tolerance, finite-value, and rank acceptance gates with
      rejection reasons retained for coverage reporting;
    - centered-logit and square-root Jacobian control losses;
@@ -1154,7 +1176,8 @@ not.
      packet-to-transport bounds;
    - a one-dimensional finite-difference Sobolev grid audit (empirical, per
      Section 11.4), the sufficiency decomposition of Section 9.4, and the
-     context-shuffled cubic control of Section 7.
+     whole-context-block cubic control of Section 7, explicitly without a
+     joint-realizability guarantee for the composite \((G,L,C)\) target.
    The multi-dimensional \(H^{s_*}\) audit and the band-limited chart basis
    are not yet implemented.
 2. `experiments/build_teacher_packets.py`
@@ -1171,23 +1194,25 @@ not.
    - analytic affine-softmax and boundary Bernoulli packet fixtures with
      exact closed forms, including the vanishing of \(\Gamma^{(1)}\);
    - score-moment versus probability-difference cubic estimators: affine
-     exactness and float32-underflow robustness;
+     exactness, strict probability-underflow rejection, and a float64-logit
+     path that preserves the score moment;
    - linear chart-change covariance of \(G\), \(C\), and
      \(\Gamma^{(\alpha)}\);
    - consistency of the packet \(L\) with finite differences of the packet
      \(G\) field;
    - zero defects under self-distillation;
    - numerical domination of the Section 11.2 and 11.3 bounds over directly
-     computed connection and transport defects;
+     computed connection and transport defects, including an adversarial
+     regression for the covariant-index unfolding used by Section 11.2;
    - the one-dimensional Sobolev grid audit against a closed form;
    - the KL-only oscillatory escape;
    - rank-gate and Richardson refinement-gate rejections;
    - checksummed serialization round-trip and float32 quantization error;
    - the strict distinction between Jacobian and Gram-metric matching;
    - exact additivity of the sufficiency decomposition on discrete fibers;
-   - stratum-preserving context-shuffled cubic controls.
-   An explicit schema-version rejection test and a dedicated logit-gauge
-   test remain to be added.
+   - stratum-preserving whole-context-block cubic controls, invalid-simplex
+     rejection, float64-logit enforcement, logit-gauge invariance, all-field
+     checksum tampering, and schema-version rejection.
 
 ## 14. Decision sequence
 

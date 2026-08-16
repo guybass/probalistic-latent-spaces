@@ -525,10 +525,21 @@ training and packet specification is
 - one-dimensional charts for the initial \(H^3\) audit and two-dimensional
   soft-token charts for packet transfer, all with frozen anchor tokens;
 - frozen chart-sampling measure with a reported density and quadrature audit;
-- offline float64 teacher packets and float32 deterministic serialization;
+- offline float64 teacher packets, float32 deterministic serialization of the
+  geometric sidecar, and float64 output anchors unless an error-bounded output
+  compression is declared;
 - adapter or final-block student training with the LM head frozen;
-- four seeds with identical initialization and example order across arms;
+- four seeds with identical initialization and a frozen example order across
+  arms;
 - NLL-matched selection or a preregistered behavior--NLL Pareto frontier.
+
+The primary training comparison fixes total student-training FLOPs or wall
+time, including forward, backward, JVP, and ODE work. Each arm consumes the
+longest prefix it can process from the frozen order, and processed-example
+counts are reported. A secondary fixed-exposure run uses identical examples
+and steps and reports its unequal compute. NLL matching is a model-selection
+constraint, not a substitute for compute matching. Shared offline teacher
+packet generation is accounted for separately.
 
 At each accepted point, store
 
@@ -560,15 +571,21 @@ connection through
 | D5 | D3 plus a context-shuffled teacher cubic target replacing \(C_T\); \(L\) is never scrambled |
 | D6 | D4 plus integrated transport matching; secondary only |
 
-For D5, keep the \(G_T\) and \(L_T\) targets and replace each packet's cubic
-target with the teacher's cubic tensor from a preregistered donor context,
-shuffled within strata of matched Fisher conditioning and metric scale and
-held fixed per seed. \(L\) is never scrambled: it is a pointwise function of
+For D5, keep the \(G_T\) and \(L_T\) targets and replace each context block's
+cubic field with the teacher's field from one preregistered donor context at
+matching chart coordinates, shuffled within strata of matched Fisher
+conditioning and metric scale and held fixed per seed. Each donor \(C_T\) is a
+real teacher tensor, but its combination with the recipient \((G_T,L_T)\) is
+not guaranteed to be jointly realizable by one predictive map; D5 is therefore
+a coherent donor-field control, not a realizability control. \(L\) is never
+scrambled: it is a pointwise function of
 the metric derivatives, so a scrambled-\(L\) target is jointly infeasible
 with the retained \(G_T\) target at dense sampling. Per-packet
 Fisher-orthogonal scrambles of \(C\) are discontinuous across packets and act
 as shrinkage pressure rather than an orientation control; they are secondary
-stress tests. Achieved geometric-loss floors must be reported per arm. The
+stress tests. Achieved geometric-loss floors must be reported per arm, and an
+elevated D5 floor makes the D4--D5 contrast infeasible rather than positive
+evidence. The
 chart output-KD term is evaluated at the identical full stencil-point set in
 every arm, making D1 the stencil-matched exposure control.
 [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
@@ -592,7 +609,8 @@ fixed-representation conditional-variance obstruction and cross-model
 conditional-mean-field mismatch in the student metric.
 
 A positive result requires a connection arm to improve held-out transport and a
-preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched NLL with
+preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched compute and
+matched NLL, or on a preregistered behavior--NLL Pareto frontier, with
 paired seed effects and hierarchical bootstrap intervals clearing a
 preregistered practical-effect threshold (four seeds is a preliminary pilot
 scale; three-of-four counting is a stopping rule, not a confirmatory
@@ -605,6 +623,9 @@ packet loss alone is not evidence of useful compression.
 - construct packets in the declared float64 teacher inference dtype, with
   score-moment cubics from JVPs or logit central differences as primary and
   the probability-difference cubic as audit;
+- reject nonfinite, nonpositive, or unnormalized probability vectors rather
+  than clipping or silently excluding outcomes; casting lower-precision model
+  outputs to float64 after inference does not satisfy the dtype contract;
 - refine central differences at \((h,h/2,h/4)\) and accept via a
   Richardson-style preregistered relative tolerance, not a visually judged
   plateau;

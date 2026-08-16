@@ -903,16 +903,20 @@ For an estimated alignment $\Phi$ and sampled paths and tangent vectors, define
     \mathcal D_{\mathrm{PT}}^{(\alpha)}(A,B;\Phi)
     =\E_{\gamma,v}
     \frac{\|\dd\Phi_{\gamma(1)} P_\gamma^{A,\alpha}v
-    -P_{\Phi\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)} v\|_{g_B(\Phi(\gamma(1)))}}{\|v\|_{g_A(\gamma(0))}}.
+    -P_{\Phi\gamma}^{B,\alpha}\dd\Phi_{\gamma(0)} v\|_{g_B(\Phi(\gamma(1)))}}
+    {\|\dd\Phi_{\gamma(0)}v\|_{g_B(\Phi(\gamma(0)))}}.
     \label{eq:pt-score}
 \end{equation}
-The numerator is measured in model $B$'s Fisher norm at the endpoint and the denominator in model $A$'s Fisher norm at the base point, so the score is invariant under separate reparameterizations of either chart. Because $\Phi$ enters both the transports and the comparison, the Fisher distortion of the alignment,
+The numerator is measured in model $B$'s Fisher norm at the endpoint and normalized by the aligned input in model $B$'s Fisher norm at the base point. Since $\Phi$ is a local diffeomorphism, the denominator is nonzero for $v\ne0$. This relative score is invariant under separate reparameterizations of either chart and does not decrease merely because every alignment derivative is multiplied by a common scalar. Because $\Phi$ also changes the compared path, alignment scale and distortion must still be audited. Define
 \begin{equation}
+    L(\Phi)=\sup_{x\in K}\|\dd\Phi_x\|_{g_A\to g_B},
+    \qquad
+    L(\Phi^{-1})=\sup_{x\in K}\|\dd\Phi_x^{-1}\|_{g_B\to g_A},
+    \qquad
     \kappa(\Phi)
-    =\sup_{x\in K}\|\dd\Phi_x\|_{g_A\to g_B}\,
-     \sup_{x\in K}\|\dd\Phi_x^{-1}\|_{g_B\to g_A},
+    =L(\Phi)L(\Phi^{-1}),
 \end{equation}
-must be reported alongside the score: rescaling or distorting $\Phi$ can otherwise trade score against distortion, and scores computed under different alignments are not comparable. Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive equivalence, while Corollary~\ref{cor:cross-model-commutator} bounds its aligned-norm counterpart under approximate equivalence. A practical study should test whether \eqref{eq:pt-score} predicts held-out steering transfer or task generalization beyond output KL and representation-only similarities such as CKA.
+and report all three quantities rather than $\kappa$ alone: uniform rescaling changes the two Lipschitz factors inversely while leaving their product unchanged. Alignment fitting must impose a preregistered scale or bi-Lipschitz range, and scores computed under different unconstrained alignments are not comparable. Theorem~\ref{thm:exact-naturality} makes this score zero under exact predictive equivalence. Corollary~\ref{cor:cross-model-commutator} bounds its aligned-norm counterpart under approximate equivalence; converting that bound to the relative Fisher score incurs the declared norm-equivalence and lower-singular-value factors. A practical study should test whether \eqref{eq:pt-score} predicts held-out steering transfer or task generalization beyond output KL and representation-only similarities such as CKA.
 
 \subsection{Selecting the connection}
 
