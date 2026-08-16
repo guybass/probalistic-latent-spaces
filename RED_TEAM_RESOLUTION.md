@@ -283,7 +283,8 @@ Seven findings. Four restated limitations the manuscript already disclosed
 (no semantic evidence yet; ambient-versus-intrinsic pilot geometry; Sobolev
 and rank hypotheses; almost-sure, distribution-relative semantic descent) and
 one asked for engagement with literature already cited and discussed in the
-related-work section. Two were accepted and repaired in commit `3c422f8`:
+related-work section. Two findings contained accepted parts. The source-level
+repairs landed in commit `3c422f8`:
 
 - **Accepted:** "aligned tangent norms" was used undefined. The cross-model
   commutator corollary now defines the aligned norm as the \(\dd\Phi\)
@@ -291,8 +292,14 @@ related-work section. Two were accepted and repaired in commit `3c422f8`:
   the proof bounds, and gives the extra \(\sup\|\dd\Phi\|\) factor incurred
   under independently chosen norms.
 - **Accepted:** the transport commutation score left its norm unspecified.
-  It now uses model \(B\)'s Fisher norm at the endpoint over the aligned
-  input norm at the base point.
+  Commit `3c422f8` made the endpoint and base-point Fisher norms explicit;
+  Round 3 later strengthened the denominator to the aligned input norm to
+  remove the uniform-scale gaming mode.
+- **Accepted:** the claim that the current command reproduced the historical
+  pilot's control draws was false because the archived JSON predates the
+  order-independent hashed seeding. The protocol now says exactly which
+  deterministic quantities reproduce and why the regenerated controls differ.
+  The PDF-staleness half of the same finding remains an explicit build task.
 
 ### Round 2 --- distillation specification
 
@@ -352,6 +359,11 @@ repaired: a vestigial `excluded_outcomes` field that strict validation had
 made permanently zero; a non-portable `allow_nan` checksum; this ledger's own
 omission of the external rounds; and a metric-norm-blind eigenvalue tolerance
 on deserialization.
+
+The packet envelope is now strict JSON, while its checksum is computed from a
+labeled, length-prefixed binary encoding with explicit shapes and little-endian
+IEEE-754 values. It therefore does not depend on Python-specific JSON float
+spellings and can be reproduced by a cross-language shard reader.
 
 The hygiene repair itself introduced and then corrected an error worth
 recording. Removing the exclusion path came with the claim that both cubic

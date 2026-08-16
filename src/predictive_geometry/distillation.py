@@ -23,8 +23,8 @@ from __future__ import annotations
 from collections.abc import Hashable
 from dataclasses import dataclass
 import hashlib
-import json
 import math
+import struct
 from typing import Callable, Sequence
 
 import numpy as np
@@ -151,7 +151,7 @@ def _jet_tensors(
     h: float,
     score_logits_fn: LogitMap | None = None,
     score_logit_jacobian_fn: LogitJacobianMap | None = None,
-) -> tuple[Vector, Matrix, Tensor3, Tensor3, Tensor3, int]:
+) -> tuple[Vector, Matrix, Tensor3, Tensor3, Tensor3]:
     """Return ``(q, G, L, C_score, C_audit)`` at step ``h``.
 
     ``G`` and ``L`` come from central differences of ``psi = 2 sqrt(q)``.
@@ -693,17 +693,89 @@ def _payload_arrays(packet: ConnectionPacket) -> list[NDArray]:
     ]
 
 
-def _packet_checksum(body: dict) -> str:
-    """Checksum the complete canonical packet body, including audit metadata."""
+_PACKET_BODY_FIELDS = frozenset(
+    {
+        "schema_version",
+        "step",
+        "z",
+        "q",
+        "metric",
+        "first_kind",
+        "cubic",
+        "cubic_audit",
+        "cubic_audit_finite",
+        "metric_eigenvalues",
+        "refinement_error",
+        "accepted",
+        "rejection_reason",
+        "serialization_quantization_error",
+        "serialization_metric_eigenvalue_error_bound",
+    }
+)
 
+
+def _packet_checksum(body: dict) -> str:
+    """Checksum a language-independent binary encoding of the packet body.
+
+    Every field is labeled and length-prefixed. Numeric arrays use C-order
+    little-endian IEEE-754 bytes with explicit dimensions; scalar floats use
+    little-endian binary64. This avoids dependence on a JSON implementation's
+    float spelling while the surrounding packet remains strict JSON.
+    """
+
+    if set(body) != _PACKET_BODY_FIELDS:
+        raise ValueError("packet body fields do not match the declared schema")
     digest = hashlib.blake2b(digest_size=16, person=b"pcdpack")
-    canonical = json.dumps(
-        body,
-        sort_keys=True,
-        separators=(",", ":"),
-        allow_nan=False,
-    ).encode("utf-8")
-    digest.update(canonical)
+    digest.update(b"pcd-packet-3-binary-v1\x00")
+
+    def add_bytes(label: str, payload: bytes) -> None:
+        encoded_label = label.encode("utf-8")
+        digest.update(struct.pack("<H", len(encoded_label)))
+        digest.update(encoded_label)
+        digest.update(struct.pack("<Q", len(payload)))
+        digest.update(payload)
+
+    def add_float(label: str) -> None:
+        add_bytes(label, struct.pack("<d", float(body[label])))
+
+    def add_string(label: str) -> None:
+        value = body[label]
+        if not isinstance(value, str):
+            raise ValueError(f"packet field {label!r} must be a string")
+        add_bytes(label, value.encode("utf-8"))
+
+    def add_bool(label: str) -> None:
+        value = body[label]
+        if not isinstance(value, bool):
+            raise ValueError(f"packet field {label!r} must be boolean")
+        add_bytes(label, struct.pack("<B", int(value)))
+
+    def add_array(label: str, dtype: str) -> None:
+        array = np.ascontiguousarray(np.asarray(body[label], dtype=np.dtype(dtype)))
+        shape = struct.pack("<I", array.ndim) + b"".join(
+            struct.pack("<Q", dimension) for dimension in array.shape
+        )
+        add_bytes(f"{label}:shape", shape)
+        add_bytes(f"{label}:data", array.tobytes(order="C"))
+
+    add_string("schema_version")
+    add_float("step")
+    add_array("z", "<f4")
+    add_array("q", "<f8")
+    add_array("metric", "<f4")
+    add_array("first_kind", "<f4")
+    add_array("cubic", "<f4")
+    add_bool("cubic_audit_finite")
+    if body["cubic_audit_finite"]:
+        add_array("cubic_audit", "<f4")
+    elif body["cubic_audit"] is not None:
+        raise ValueError("non-finite cubic audit must use a null payload")
+    add_array("metric_eigenvalues", "<f8")
+    add_float("refinement_error")
+    add_bool("accepted")
+    add_string("rejection_reason")
+    add_float("serialization_quantization_error")
+    add_float("serialization_metric_eigenvalue_error_bound")
     return digest.hexdigest()
 
 
@@ -811,7 +883,9 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
         if data.get("cubic_audit") is not None:
             raise ValueError("non-finite cubic audit must be represented by null")
         cubic_audit = np.full((m, m, m), np.nan, dtype=np.float32)
-    accepted = bool(data["accepted"])
+    if not isinstance(data["accepted"], bool):
+        raise ValueError("serialized accepted flag must be boolean")
+    accepted = data["accepted"]
     rejection_reason = str(data["rejection_reason"])
     primary_finite = all(
         np.all(np.isfinite(block)) for block in (z, q, metric, first_kind, cubic)

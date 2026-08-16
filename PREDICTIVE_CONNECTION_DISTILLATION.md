@@ -1163,8 +1163,9 @@ not.
 
 1. `src/predictive_geometry/distillation.py` --- **implemented**:
    - shared-chart packet dataclass with checksummed float32 geometric tensors,
-     a float64 output anchor, checksummed audit metadata, invariant checks, and
-     schema-version validation;
+     a float64 output anchor, strict-JSON audit metadata, an explicit status
+     for a non-finite secondary cubic audit, a measured spectral quantization
+     bound, invariant checks, and schema-version validation;
    - central-difference jet assembly for \(G\) and \(L\), strict open-simplex
      validation, and score-moment cubic assembly from float64 logits or exact
      logit JVPs, with the probability-difference form as audit;

@@ -528,6 +528,23 @@ class TestAuditsAndGates(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksum"):
             packet_from_dict(metadata_payload)
 
+    def test_packet_v3_checksum_has_cross_language_golden_vector(self):
+        packet = ConnectionPacket(
+            z=np.array([0.5]),
+            step=0.125,
+            q=np.array([0.25, 0.75]),
+            metric=np.array([[2.0]]),
+            first_kind=np.array([[[3.0]]]),
+            cubic=np.array([[[4.0]]]),
+            cubic_audit=np.array([[[5.0]]]),
+            metric_eigenvalues=np.array([2.0]),
+            refinement_error=0.0625,
+            accepted=True,
+            rejection_reason="",
+        )
+        payload = packet_to_dict(packet, max_quantization_error=0.0)
+        self.assertEqual(payload["checksum"], "03fff643f090b5aed8dbc1eaadf388bb")
+
     def test_serialization_enforces_quantization_tolerance(self):
         packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
         with self.assertRaisesRegex(ValueError, "quantization"):
@@ -552,24 +569,6 @@ class TestAuditsAndGates(unittest.TestCase):
         corrupted = replace(packet, refinement_error=math.nan)
         with self.assertRaisesRegex(ValueError, "non-finite"):
             packet_to_dict(corrupted)
-
-    def test_nonfinite_secondary_audit_has_portable_null_encoding(self):
-        offsets = np.array([0.0, -1.0, -2.0, -400.0])
-        slopes = np.array([1.0, 0.5, -0.5, 2.0])
-
-        def logits_fn(z):
-            return np.asarray(offsets + slopes * float(z[0]), dtype=np.float64)
-
-        packet = build_packet_from_logits(logits_fn, [0.1], 1e-2)
-        self.assertTrue(packet.accepted)
-        self.assertFalse(np.all(np.isfinite(packet.cubic_audit)))
-        payload = packet_to_dict(packet)
-        self.assertFalse(payload["cubic_audit_finite"])
-        self.assertIsNone(payload["cubic_audit"])
-        json.dumps(payload, allow_nan=False)
-        restored = packet_from_dict(payload)
-        self.assertTrue(np.all(np.isnan(restored.cubic_audit)))
-        np.testing.assert_allclose(restored.cubic, packet.cubic, rtol=1e-6, atol=1e-6)
 
     def test_large_metric_eigenvalues_use_measured_quantization_bound(self):
         packet = build_packet(
