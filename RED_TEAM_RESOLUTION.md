@@ -1,6 +1,6 @@
 # Red-Team Resolution
 
-Date: 2026-08-06
+Date: 2026-08-06; external review rounds appended 2026-08-16
 
 This file records the disposition of the theoretical and empirical audits. The authoritative formal source is [paper/main.tex](paper/main.tex); the authoritative empirical design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md). Historical notes remain in the repository to show the development of the project, but they do not override those two files.
 
@@ -270,6 +270,114 @@ All thresholds are exposed by the real-model command and stored in new result pa
 - compare integrated e, LC, m, and fitted-alpha transport on held-out endpoints;
 - make behavioral transfer the primary outcome;
 - test whether curvature predicts controlled small-loop/order effects beyond entropy, edge length, conditioning, and linguistic interaction.
+
+## External review rounds (August 2026)
+
+Four adversarial reviews were run against the manuscript, the protocol, the
+distillation specification, and the implemented packet core. Findings are
+recorded here whether accepted or refuted.
+
+### Round 1 --- manuscript and pilot
+
+Seven findings. Four restated limitations the manuscript already disclosed
+(no semantic evidence yet; ambient-versus-intrinsic pilot geometry; Sobolev
+and rank hypotheses; almost-sure, distribution-relative semantic descent) and
+one asked for engagement with literature already cited and discussed in the
+related-work section. Two were accepted and repaired in commit `3c422f8`:
+
+- **Accepted:** "aligned tangent norms" was used undefined. The cross-model
+  commutator corollary now defines the aligned norm as the \(\dd\Phi\)
+  pullback of the background norm, states the equivalent form on \(M_A\) that
+  the proof bounds, and gives the extra \(\sup\|\dd\Phi\|\) factor incurred
+  under independently chosen norms.
+- **Accepted:** the transport commutation score left its norm unspecified.
+  It now uses model \(B\)'s Fisher norm at the endpoint over the aligned
+  input norm at the base point.
+
+### Round 2 --- distillation specification
+
+Twelve findings, all accepted and repaired in commit `d0a4a59`, notably:
+stencil exposure was unequal across arms (the chart output-KD term now runs
+over the identical stencil set in every arm, making D1 the exposure control);
+the cubic estimator divided probability differences by \(q^2\) instead of
+using the manuscript's own score-moment identity; D5's per-packet scramble
+produced a discontinuous target field; the packet-to-transport target omitted
+a sampling term; the band-limited Sobolev quantity was called a certificate;
+and the "compact packet" claim ignored the full-vocabulary output anchor.
+
+### Round 3 --- implemented packet core
+
+Seven findings. One reproduction was factually wrong on this code (the
+proposed invalid-simplex examples were rejected for degenerate rank, not
+accepted), but its underlying vulnerability was real and confirmed with a
+corrected \(z\)-dependent counterexample. The remainder were accepted and
+repaired in commit `db9e77b`:
+
+- **Accepted, executable defect.** `alpha_connection` raises the final index
+  of \(L\) and \(C\) while `tensor_operator_norm` unfolded the first index,
+  so the implemented Section 11.2 bound could be violated; a reproduction
+  reached a defect/bound ratio of 1.48. `tensor_operator_norm` now takes an
+  `output_axis` argument, the violating instance is a regression test, and a
+  5000-trial adversarial stress over random metrics, \(\alpha\), and
+  perturbation scales peaks at 0.89. The proposition itself was unaffected:
+  it assumes compatible norms, which the implementation had not supplied.
+- **Accepted:** the builder accepted invalid probability vectors. It now
+  validates the finite open simplex and normalization, and
+  `build_packet_from_logits` provides a precision-safe entry point with
+  float64 enforcement and optional exact logit Jacobians.
+- **Accepted:** `context_shuffled_cubics` rolled individual packets. It now
+  moves complete donor-context fields at matching chart keys within strata
+  and rejects singleton strata. D5 is documented as a coherent donor-field
+  control, **not** a realizability control, since the composite
+  recipient-\((G,L)\) plus donor-\(C\) target need not be the jet of any one
+  predictive map.
+- **Accepted:** \(\kappa(\Phi)=\sup\|\dd\Phi\|\sup\|\dd\Phi^{-1}\|\) cannot
+  detect uniform rescaling. The score's denominator is now the aligned input
+  norm, and both Lipschitz factors are reported separately.
+- **Accepted:** grid Hölder quotients were called an explicit transport
+  guarantee. Section 11.3 now separates certified from sampled moduli.
+- **Accepted:** the serialization checksum covered only tensor payloads, and
+  compute matching was asserted rather than designed. Both repaired.
+
+### Round 4 --- repository red team
+
+Adversarial numerical probes beyond the test suite confirmed Levi--Civita
+metric compatibility (relative error \(10^{-15}\)), the Amari \(\pm\alpha\)
+duality pairing (\(10^{-16}\)), loop transport against the closed-form
+holonomy angle (\(10^{-12}\)), agreement between the finite-difference packet
+builder and the independent exact-moment implementation (\(10^{-13}\)), and
+matrix-valued transport-bound domination in a two-dimensional chart. No
+mathematical defect was found. Four hygiene findings were accepted and
+repaired: a vestigial `excluded_outcomes` field that strict validation had
+made permanently zero; a non-portable `allow_nan` checksum; this ledger's own
+omission of the external rounds; and a metric-norm-blind eigenvalue tolerance
+on deserialization.
+
+The hygiene repair itself introduced and then corrected an error worth
+recording. Removing the exclusion path came with the claim that both cubic
+estimators are finite on every returned packet. That is false: squaring a
+strictly positive but tiny float64 probability underflows to zero, so the
+probability-difference audit can be non-finite while the score-moment
+primary estimator remains exact. Confirmed at \(q_{\min}\approx10^{-174}\).
+The schema therefore represents a non-finite audit as `null` with an explicit
+`cubic_audit_finite` flag, requires finiteness only of the primary tensors,
+and carries a regression test. The eigenvalue tolerance was likewise replaced
+by a principled Weyl bound: the stored
+`serialization_metric_eigenvalue_error_bound` is
+\(\|G-G_{\mathrm{float32}}\|_2\), which bounds the eigenvalue perturbation
+introduced by float32 payload quantization, plus numerical slack.
+
+### Standing limitations these rounds did not remove
+
+- The committed PDF is stale in mathematical content and must be rebuilt.
+- No independent re-derivation of the manuscript's analysis has been
+  performed; passing tests and surviving review are evidence of care, not
+  proof of correctness.
+- The certified surrogate residual of Section 11.4 remains open, so the
+  risk--regularity route and any sampled Hölder constants stay conditional.
+- Sections 13.2--13.4 of the distillation protocol --- the real-model packet
+  builder, student trainer, and evaluator --- are unimplemented, and no
+  empirical semantic result exists.
 
 ## Outcome logic
 

@@ -10,7 +10,9 @@ The research task is to determine which tradeoff actual semantic composition fol
 
 ## Theory paper
 
-The arXiv-style manuscript is in [`paper/main.tex`](paper/main.tex), with a verified PDF at [`output/pdf/predictive_geometric_agreement.pdf`](output/pdf/predictive_geometric_agreement.pdf).
+The arXiv-style manuscript is in [`paper/main.tex`](paper/main.tex), with a PDF at [`output/pdf/predictive_geometric_agreement.pdf`](output/pdf/predictive_geometric_agreement.pdf).
+
+> **The committed PDF is stale; `paper/main.tex` is authoritative.** The PDF predates the aligned-tangent-norm definition in the cross-model commutator corollary and the revised transport commutation score, so its operational-tests section displays superseded equations, not merely superseded metadata. No LaTeX engine is installed on this machine; rebuild per [`paper/README.md`](paper/README.md) before citing or submitting.
 
 Its central result is a quantitative stability ladder from predictive-map agreement to Fisher metric, Amari alpha-connection, parallel-transport, and curvature agreement. The revised paper adds a square-root/Hellinger theorem whose Levi--Civita constants have no explicit vocabulary-size or minimum-token-probability dependence, and score-moment bounds for affine heads. It also proves that cross-entropy convergence alone is insufficient and states exactly when conditional variance is informative: only for a genuinely noninjective predictive map. A declared coarsening is handled by replacing the map, effect, and image geometry with their coarsened counterparts, not by conditioning the original tangent field on coarse labels.
 
@@ -24,7 +26,7 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 
 - [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md): plain-language explanation of what is proved, what the pilot observed, and what remains open.
 - [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): current CPU protocol, spectrum-matched controls, numerical gates, finite-edge safeguards, falsification criteria, and the execution-only Pythia-14M pilot.
-- [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical and empirical audit finding.
+- [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical, empirical, and implementation audit finding, including the external review rounds.
 - [TRAINING_REGIMES.md](TRAINING_REGIMES.md): proposed matched training objectives; these remain future experiments rather than supported conclusions.
 - [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md): unified teacher--student protocol combining the KL--Sobolev Levi--Civita guarantee with direct \((G,L,C)\) packet distillation, derivative controls, CPU curriculum, and falsification criteria.
 - [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md), [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md), [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md), and [RESEARCH_NOTES.md](RESEARCH_NOTES.md): historical development notes, superseded wherever they conflict with the manuscript or protocol.

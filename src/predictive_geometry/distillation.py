@@ -31,7 +31,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-SCHEMA_VERSION = "pcd-packet-2"
+SCHEMA_VERSION = "pcd-packet-3"
 
 _TRAPEZOID = getattr(np, "trapezoid", None) or getattr(np, "trapz")
 
@@ -54,8 +54,9 @@ class ConnectionPacket:
     relative to a dense metric field is sampling density only.  ``cubic`` is
     the score-moment Amari--Chentsov tensor (primary estimator);
     ``cubic_audit`` is the probability-difference estimator retained as an
-    independent audit and may be non-finite when the map was evaluated in a
-    quantized dtype.
+    independent audit and may be non-finite even for strictly positive inputs
+    when squaring a tiny float64 probability underflows.  This does not
+    invalidate the score-moment primary estimator.
     """
 
     z: Vector
@@ -67,10 +68,10 @@ class ConnectionPacket:
     cubic_audit: Tensor3
     metric_eigenvalues: Vector
     refinement_error: float
-    excluded_outcomes: int
     accepted: bool
     rejection_reason: str
     serialization_quantization_error: float = 0.0
+    serialization_metric_eigenvalue_error_bound: float = 0.0
     schema_version: str = SCHEMA_VERSION
 
 
@@ -151,7 +152,7 @@ def _jet_tensors(
     score_logits_fn: LogitMap | None = None,
     score_logit_jacobian_fn: LogitJacobianMap | None = None,
 ) -> tuple[Vector, Matrix, Tensor3, Tensor3, Tensor3, int]:
-    """Return ``(q, G, L, C_score, C_audit, excluded)`` at step ``h``.
+    """Return ``(q, G, L, C_score, C_audit)`` at step ``h``.
 
     ``G`` and ``L`` come from central differences of ``psi = 2 sqrt(q)``.
     ``C_score`` uses an exact logit Jacobian when supplied, otherwise central
@@ -220,12 +221,12 @@ def _jet_tensors(
     cubic = np.einsum("a,ia,ja,ka->ijk", q0, scores, scores, scores)
 
     d_q = (q_plus - q_minus) / (2.0 * h)
-    with np.errstate(divide="ignore", invalid="ignore"):
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         cubic_audit = np.einsum(
             "ia,ja,ka,a->ijk", d_q, d_q, d_q, 1.0 / np.square(q0)
         )
 
-    return q0, metric, first_kind, cubic, cubic_audit, 0
+    return q0, metric, first_kind, cubic, cubic_audit
 
 
 def _max_relative_difference(
@@ -297,7 +298,6 @@ def build_packet(
     first_kind = second_ext[1]
     cubic = second_ext[2]
     cubic_audit = levels[2][4]
-    excluded = max(level[5] for level in levels)
 
     primary_finite = all(
         np.all(np.isfinite(block)) for block in (metric, first_kind, cubic)
@@ -330,7 +330,6 @@ def build_packet(
         cubic_audit=cubic_audit,
         metric_eigenvalues=eigenvalues,
         refinement_error=refinement_error,
-        excluded_outcomes=excluded,
         accepted=accepted,
         rejection_reason=reason,
     )
@@ -702,7 +701,7 @@ def _packet_checksum(body: dict) -> str:
         body,
         sort_keys=True,
         separators=(",", ":"),
-        allow_nan=True,
+        allow_nan=False,
     ).encode("utf-8")
     digest.update(canonical)
     return digest.hexdigest()
@@ -713,16 +712,51 @@ def packet_to_dict(
     *,
     max_quantization_error: float = 1e-6,
 ) -> dict:
-    """Serialize float32 geometry, a float64 output anchor, and all-field checksum."""
+    """Serialize float32 geometry, a float64 output anchor, and all-field checksum.
+
+    The portable schema is strict JSON. A non-finite secondary cubic audit is
+    represented by ``null`` plus ``cubic_audit_finite=false``; non-finite
+    primary tensors still require a separate rejection-audit channel.
+    """
 
     if packet.schema_version != SCHEMA_VERSION:
         raise ValueError("packet schema version does not match this writer")
     if not math.isfinite(max_quantization_error) or max_quantization_error < 0.0:
         raise ValueError("max_quantization_error must be finite and nonnegative")
+    primary_finite = all(
+        np.all(np.isfinite(block))
+        for block in (
+            packet.z,
+            packet.q,
+            packet.metric,
+            packet.first_kind,
+            packet.cubic,
+            packet.metric_eigenvalues,
+        )
+    ) and math.isfinite(packet.refinement_error)
+    if not primary_finite:
+        raise ValueError(
+            "packets with non-finite primary values cannot be serialized under the "
+            "strict-JSON schema; log them through a separate audit channel"
+        )
     measured_quantization_error = quantization_error(packet)
     if measured_quantization_error > max_quantization_error:
         raise ValueError("float32 packet quantization exceeds the declared tolerance")
     payload = _payload_arrays(packet)
+    original_eigenvalues = np.linalg.eigvalsh(packet.metric)
+    eigenvalue_scale = max(1.0, float(np.linalg.norm(packet.metric, 2)))
+    eigenvalue_numeric_slack = 32.0 * np.finfo(np.float64).eps * eigenvalue_scale
+    if not np.allclose(
+        packet.metric_eigenvalues,
+        original_eigenvalues,
+        rtol=0.0,
+        atol=eigenvalue_numeric_slack,
+    ):
+        raise ValueError("packet metric eigenvalues disagree with the metric")
+    metric_eigenvalue_error_bound = float(
+        np.linalg.norm(packet.metric - payload[2].astype(np.float64), 2)
+    )
+    cubic_audit_finite = bool(np.all(np.isfinite(payload[5])))
     body = {
         "schema_version": packet.schema_version,
         "step": packet.step,
@@ -731,13 +765,14 @@ def packet_to_dict(
         "metric": payload[2].tolist(),
         "first_kind": payload[3].tolist(),
         "cubic": payload[4].tolist(),
-        "cubic_audit": payload[5].tolist(),
+        "cubic_audit": payload[5].tolist() if cubic_audit_finite else None,
+        "cubic_audit_finite": cubic_audit_finite,
         "metric_eigenvalues": packet.metric_eigenvalues.tolist(),
         "refinement_error": packet.refinement_error,
-        "excluded_outcomes": packet.excluded_outcomes,
         "accepted": packet.accepted,
         "rejection_reason": packet.rejection_reason,
         "serialization_quantization_error": measured_quantization_error,
+        "serialization_metric_eigenvalue_error_bound": metric_eigenvalue_error_bound,
     }
     return {**body, "checksum": _packet_checksum(body)}
 
@@ -756,16 +791,26 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
         np.asarray(data["metric"], dtype=np.float32),
         np.asarray(data["first_kind"], dtype=np.float32),
         np.asarray(data["cubic"], dtype=np.float32),
-        np.asarray(data["cubic_audit"], dtype=np.float32),
     ]
-    z, q, metric, first_kind, cubic, cubic_audit = arrays
+    z, q, metric, first_kind, cubic = arrays
     if z.ndim != 1 or z.size == 0 or q.ndim != 1 or q.size == 0:
         raise ValueError("invalid serialized point or probability shape")
     m = z.size
     if metric.shape != (m, m) or any(
-        block.shape != (m, m, m) for block in (first_kind, cubic, cubic_audit)
+        block.shape != (m, m, m) for block in (first_kind, cubic)
     ):
         raise ValueError("serialized geometric tensor shapes are inconsistent")
+    cubic_audit_finite = data.get("cubic_audit_finite")
+    if not isinstance(cubic_audit_finite, bool):
+        raise ValueError("serialized cubic-audit status must be boolean")
+    if cubic_audit_finite:
+        cubic_audit = np.asarray(data["cubic_audit"], dtype=np.float32)
+        if cubic_audit.shape != (m, m, m) or not np.all(np.isfinite(cubic_audit)):
+            raise ValueError("finite cubic audit has invalid values or shape")
+    else:
+        if data.get("cubic_audit") is not None:
+            raise ValueError("non-finite cubic audit must be represented by null")
+        cubic_audit = np.full((m, m, m), np.nan, dtype=np.float32)
     accepted = bool(data["accepted"])
     rejection_reason = str(data["rejection_reason"])
     primary_finite = all(
@@ -780,19 +825,24 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
 
     step = float(data["step"])
     refinement_error = float(data["refinement_error"])
-    excluded_outcomes = int(data["excluded_outcomes"])
     serialization_quantization_error = float(data["serialization_quantization_error"])
+    metric_eigenvalue_error_bound = float(
+        data["serialization_metric_eigenvalue_error_bound"]
+    )
     if not math.isfinite(step) or step <= 0.0:
         raise ValueError("serialized step must be finite and positive")
     if not math.isfinite(refinement_error) or refinement_error < 0.0:
         raise ValueError("serialized refinement error must be finite and nonnegative")
-    if excluded_outcomes < 0:
-        raise ValueError("serialized excluded-outcome count must be nonnegative")
     if (
         not math.isfinite(serialization_quantization_error)
         or serialization_quantization_error < 0.0
     ):
         raise ValueError("serialized quantization error must be finite and nonnegative")
+    if (
+        not math.isfinite(metric_eigenvalue_error_bound)
+        or metric_eigenvalue_error_bound < 0.0
+    ):
+        raise ValueError("serialized metric eigenvalue error bound is invalid")
 
     eigenvalues = np.asarray(data["metric_eigenvalues"], dtype=np.float64)
     recomputed = (
@@ -802,7 +852,12 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
     )
     if eigenvalues.shape != (m,):
         raise ValueError("serialized metric eigenvalues are invalid")
-    if not np.allclose(eigenvalues, recomputed, rtol=1e-5, atol=1e-7, equal_nan=True):
+    eigenvalue_scale = max(1.0, float(np.linalg.norm(metric, 2)))
+    numeric_slack = 32.0 * np.finfo(np.float64).eps * eigenvalue_scale
+    eigenvalue_atol = metric_eigenvalue_error_bound + numeric_slack
+    if not np.allclose(
+        eigenvalues, recomputed, rtol=0.0, atol=eigenvalue_atol
+    ):
         raise ValueError("serialized metric eigenvalues disagree with the metric")
 
     if accepted and rejection_reason:
@@ -820,10 +875,10 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
         cubic_audit=cubic_audit.astype(np.float64),
         metric_eigenvalues=eigenvalues,
         refinement_error=refinement_error,
-        excluded_outcomes=excluded_outcomes,
         accepted=accepted,
         rejection_reason=rejection_reason,
         serialization_quantization_error=serialization_quantization_error,
+        serialization_metric_eigenvalue_error_bound=metric_eigenvalue_error_bound,
     )
 
 

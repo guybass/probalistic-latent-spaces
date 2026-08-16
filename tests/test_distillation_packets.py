@@ -10,6 +10,8 @@ gates, serialization, the Jacobian/Gram distinction, the sufficiency
 decomposition, and the context-shuffled cubic control.
 """
 
+from dataclasses import replace
+import json
 import math
 import unittest
 
@@ -190,7 +192,7 @@ class TestCubicEstimators(unittest.TestCase):
         centered = slopes - probabilities @ slopes
         exact_cubic = probabilities @ np.power(centered, 3)
         self.assertAlmostEqual(packet.cubic[0, 0, 0], exact_cubic, places=11)
-        self.assertEqual(packet.excluded_outcomes, 0)
+        self.assertTrue(np.all(np.isfinite(packet.cubic_audit)))
 
     def test_logit_path_rejects_posthoc_float32_cast(self):
         def logits_fn(z):
@@ -513,6 +515,10 @@ class TestAuditsAndGates(unittest.TestCase):
             restored.serialization_quantization_error,
             payload["serialization_quantization_error"],
         )
+        self.assertAlmostEqual(
+            restored.serialization_metric_eigenvalue_error_bound,
+            payload["serialization_metric_eigenvalue_error_bound"],
+        )
         payload["metric"][0][0] += 1.0
         with self.assertRaises(ValueError):
             packet_from_dict(payload)
@@ -530,9 +536,102 @@ class TestAuditsAndGates(unittest.TestCase):
     def test_serialization_rejects_wrong_schema(self):
         packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
         payload = packet_to_dict(packet)
-        payload["schema_version"] = "pcd-packet-obsolete"
+        payload["schema_version"] = "pcd-packet-1"
         with self.assertRaisesRegex(ValueError, "schema"):
             packet_from_dict(payload)
+
+    def test_serialization_is_strict_json_and_rejects_nonfinite(self):
+        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        payload = packet_to_dict(packet)
+        # The emitted body must survive a strict JSON round trip so that
+        # other languages and strict parsers read identical shards.
+        reparsed = json.loads(json.dumps(payload, allow_nan=False))
+        np.testing.assert_allclose(
+            packet_from_dict(reparsed).metric, packet.metric, rtol=1e-6, atol=1e-6
+        )
+        corrupted = replace(packet, refinement_error=math.nan)
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            packet_to_dict(corrupted)
+
+    def test_nonfinite_secondary_audit_has_portable_null_encoding(self):
+        offsets = np.array([0.0, -1.0, -2.0, -400.0])
+        slopes = np.array([1.0, 0.5, -0.5, 2.0])
+
+        def logits_fn(z):
+            return np.asarray(offsets + slopes * float(z[0]), dtype=np.float64)
+
+        packet = build_packet_from_logits(logits_fn, [0.1], 1e-2)
+        self.assertTrue(packet.accepted)
+        self.assertFalse(np.all(np.isfinite(packet.cubic_audit)))
+        payload = packet_to_dict(packet)
+        self.assertFalse(payload["cubic_audit_finite"])
+        self.assertIsNone(payload["cubic_audit"])
+        json.dumps(payload, allow_nan=False)
+        restored = packet_from_dict(payload)
+        self.assertTrue(np.all(np.isnan(restored.cubic_audit)))
+        np.testing.assert_allclose(restored.cubic, packet.cubic, rtol=1e-6, atol=1e-6)
+
+    def test_large_metric_eigenvalues_use_measured_quantization_bound(self):
+        packet = build_packet(
+            affine_family(
+                np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
+            ),
+            [0.2, -0.1],
+            1e-3,
+        )
+        angle = 0.37
+        rotation = np.array(
+            [
+                [math.cos(angle), -math.sin(angle)],
+                [math.sin(angle), math.cos(angle)],
+            ]
+        )
+        metric = rotation @ np.diag([1.0, 1.3e8]) @ rotation.T
+        large_packet = replace(
+            packet,
+            metric=metric,
+            metric_eigenvalues=np.linalg.eigvalsh(metric),
+        )
+        payload = packet_to_dict(large_packet)
+        restored = packet_from_dict(payload)
+        self.assertGreater(
+            restored.serialization_metric_eigenvalue_error_bound, 0.0
+        )
+        difference = np.max(
+            np.abs(restored.metric_eigenvalues - np.linalg.eigvalsh(restored.metric))
+        )
+        self.assertLessEqual(
+            difference,
+            restored.serialization_metric_eigenvalue_error_bound + 1e-6,
+        )
+
+    def test_nonfinite_cubic_audit_serializes_as_null(self):
+        # Squaring a tiny but strictly positive float64 probability underflows
+        # to zero, so the probability-difference audit can be non-finite while
+        # the score-moment primary estimator stays exact.
+        offsets = np.array([0.0, -1.0, -400.0])
+        slopes = np.array([1.0, 0.5, 2.0])
+
+        def logits_fn(z):
+            value = float(np.atleast_1d(z)[0])
+            return np.asarray(offsets + slopes * value, dtype=np.float64)
+
+        packet = build_packet_from_logits(logits_fn, [0.1], 1e-3)
+        self.assertTrue(packet.accepted)
+        self.assertTrue(np.all(np.isfinite(packet.cubic)))
+        self.assertFalse(np.all(np.isfinite(packet.cubic_audit)))
+
+        payload = packet_to_dict(packet)
+        self.assertFalse(payload["cubic_audit_finite"])
+        self.assertIsNone(payload["cubic_audit"])
+        restored = packet_from_dict(json.loads(json.dumps(payload, allow_nan=False)))
+        self.assertTrue(np.all(np.isnan(restored.cubic_audit)))
+        np.testing.assert_allclose(restored.cubic, packet.cubic, rtol=1e-6, atol=1e-6)
+
+        inconsistent = packet_to_dict(packet)
+        inconsistent["cubic_audit"] = np.zeros((1, 1, 1)).tolist()
+        with self.assertRaises(ValueError):
+            packet_from_dict(inconsistent)
 
 
 if __name__ == "__main__":
