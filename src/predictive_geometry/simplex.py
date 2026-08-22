@@ -8,11 +8,11 @@ flat mixture and exponential connections.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-
 
 Vector = NDArray[np.float64]
 FISHER_RADIUS = 2.0
@@ -62,10 +62,11 @@ def _sphere_to_probability(x: ArrayLike) -> Vector:
         rtol=1e-8,
     ):
         raise ValueError("x must lie on the radius-two sphere")
-    if np.any(sphere_point < -1e-9):
-        raise ValueError("the geodesic left the positive square-root orthant")
-    clipped = np.maximum(sphere_point, 0.0)
-    p = (clipped / FISHER_RADIUS) ** 2
+    if np.any(sphere_point <= 0.0):
+        raise ValueError("the geodesic endpoint left the open square-root orthant")
+    p = (sphere_point / FISHER_RADIUS) ** 2
+    if np.any(p <= 0.0) or not np.all(np.isfinite(p)):
+        raise ValueError("the Fisher endpoint is not representable in the open simplex")
     return p / np.sum(p)
 
 
@@ -85,30 +86,55 @@ def fisher_inner(p: ArrayLike, u: ArrayLike, v: ArrayLike) -> float:
     p_vec = _probability(p)
     u_vec = _tangent(p_vec, u, "u")
     v_vec = _tangent(p_vec, v, "v")
-    return float(np.dot(u_vec / p_vec, v_vec))
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        terms = (u_vec * v_vec) / p_vec
+    value = float(np.sum(terms))
+    if not math.isfinite(value):
+        raise OverflowError("Fisher inner product is not representable in float64")
+    return value
 
 
 def fisher_distance(p: ArrayLike, q: ArrayLike) -> float:
     """Fisher--Rao geodesic distance between categorical distributions."""
 
-    coefficient = np.clip(bhattacharyya_coefficient(p, q), -1.0, 1.0)
-    return float(FISHER_RADIUS * np.arccos(coefficient))
+    p_vec = _probability(p, "p")
+    q_vec = _probability(q, "q")
+    if p_vec.shape != q_vec.shape:
+        raise ValueError("p and q must have the same shape")
+    chord = float(np.linalg.norm(sqrt_embed(p_vec) - sqrt_embed(q_vec)))
+    half_angle_sine = np.clip(chord / (2.0 * FISHER_RADIUS), 0.0, 1.0)
+    return float(2.0 * FISHER_RADIUS * np.arcsin(half_angle_sine))
 
 
 def _sphere_log(x: Vector, y: Vector) -> Vector:
     radius_squared = FISHER_RADIUS**2
-    cosine = float(np.clip(np.dot(x, y) / radius_squared, -1.0, 1.0))
-    theta = float(np.arccos(cosine))
-    if theta < 1e-14:
+    chord = float(np.linalg.norm(x - y))
+    half_angle_sine = float(
+        np.clip(chord / (2.0 * FISHER_RADIUS), 0.0, 1.0)
+    )
+    theta = float(2.0 * np.arcsin(half_angle_sine))
+    if theta == 0.0:
         return np.zeros_like(x)
+    cosine = float(np.clip(1.0 - chord * chord / (2.0 * radius_squared), -1.0, 1.0))
     sine = float(np.sin(theta))
     if abs(sine) < 1e-14:
         raise ValueError("the spherical logarithm is undefined at antipodes")
     return (theta / sine) * (y - cosine * x)
 
 
+def _enforce_zero_sum(vector: Vector, reference: Vector) -> Vector:
+    """Remove roundoff from a tangent without perturbing every rare component."""
+
+    corrected = np.array(vector, dtype=np.float64, copy=True)
+    corrected[int(np.argmax(reference))] -= float(np.sum(corrected))
+    return corrected
+
+
 def _sphere_exp(x: Vector, v: Vector) -> Vector:
-    norm = float(np.linalg.norm(v))
+    with np.errstate(invalid="ignore", over="ignore"):
+        norm = float(np.linalg.norm(v))
+    if not math.isfinite(norm):
+        raise ValueError("Fisher tangent norm is not representable in float64")
     if norm < 1e-14:
         return x.copy()
     angle = norm / FISHER_RADIUS
@@ -122,7 +148,11 @@ def _sphere_parallel_transport(x: Vector, y: Vector, v: Vector) -> Vector:
     denominator = FISHER_RADIUS**2 + float(np.dot(x, y))
     if abs(denominator) < 1e-14:
         raise ValueError("minimal-geodesic transport is undefined at antipodes")
-    return v - (float(np.dot(v, y)) / denominator) * (x + y)
+    with np.errstate(invalid="ignore", over="ignore"):
+        transported = v - (float(np.dot(v, y)) / denominator) * (x + y)
+    if not np.all(np.isfinite(transported)):
+        raise ValueError("Fisher transport is not representable in float64")
+    return transported
 
 
 def fisher_log(p: ArrayLike, q: ArrayLike) -> Vector:
@@ -134,8 +164,7 @@ def fisher_log(p: ArrayLike, q: ArrayLike) -> Vector:
         raise ValueError("p and q must have the same shape")
     sphere_tangent = _sphere_log(sqrt_embed(p_vec), sqrt_embed(q_vec))
     tangent = np.sqrt(p_vec) * sphere_tangent
-    tangent -= np.sum(tangent) / tangent.size
-    return tangent
+    return _enforce_zero_sum(tangent, p_vec)
 
 
 def fisher_exp(p: ArrayLike, u: ArrayLike) -> Vector:
@@ -143,7 +172,10 @@ def fisher_exp(p: ArrayLike, u: ArrayLike) -> Vector:
 
     p_vec = _probability(p)
     u_vec = _tangent(p_vec, u)
-    sphere_tangent = u_vec / np.sqrt(p_vec)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        sphere_tangent = u_vec / np.sqrt(p_vec)
+    if not np.all(np.isfinite(sphere_tangent)):
+        raise ValueError("Fisher tangent is not representable in float64 sphere coordinates")
     endpoint = _sphere_exp(sqrt_embed(p_vec), sphere_tangent)
     return _sphere_to_probability(endpoint)
 
@@ -160,14 +192,15 @@ def fisher_parallel_transport(
     if p_vec.shape != q_vec.shape:
         raise ValueError("p and q must have the same shape")
     u_vec = _tangent(p_vec, u)
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        sphere_tangent = u_vec / np.sqrt(p_vec)
+    if not np.all(np.isfinite(sphere_tangent)):
+        raise ValueError("Fisher tangent is not representable in float64 sphere coordinates")
     transported_sphere = _sphere_parallel_transport(
-        sqrt_embed(p_vec),
-        sqrt_embed(q_vec),
-        u_vec / np.sqrt(p_vec),
+        sqrt_embed(p_vec), sqrt_embed(q_vec), sphere_tangent
     )
     transported = np.sqrt(q_vec) * transported_sphere
-    transported -= np.sum(transported) / transported.size
-    return transported
+    return _enforce_zero_sum(transported, q_vec)
 
 
 def mixture_log(p: ArrayLike, q: ArrayLike) -> Vector:
@@ -210,10 +243,11 @@ def exponential_log(p: ArrayLike, q: ArrayLike) -> Vector:
     if p_vec.shape != q_vec.shape:
         raise ValueError("p and q must have the same shape")
     log_ratio = np.log(q_vec) - np.log(p_vec)
-    centered_score = log_ratio - float(np.dot(p_vec, log_ratio))
+    anchor = int(np.argmax(p_vec))
+    shifted_score = log_ratio - log_ratio[anchor]
+    centered_score = shifted_score - float(np.dot(p_vec, shifted_score))
     tangent = p_vec * centered_score
-    tangent -= np.sum(tangent) / tangent.size
-    return tangent
+    return _enforce_zero_sum(tangent, p_vec)
 
 
 def exponential_exp(p: ArrayLike, u: ArrayLike) -> Vector:
@@ -221,11 +255,19 @@ def exponential_exp(p: ArrayLike, u: ArrayLike) -> Vector:
 
     p_vec = _probability(p)
     u_vec = _tangent(p_vec, u)
-    score = u_vec / p_vec
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        score = u_vec / p_vec
+    if not np.all(np.isfinite(score)):
+        raise ValueError("exponential score is not representable in float64")
     logits = np.log(p_vec) + score
     logits -= np.max(logits)
     weights = np.exp(logits)
-    return weights / np.sum(weights)
+    if np.any(weights <= 0.0) or not np.all(np.isfinite(weights)):
+        raise ValueError("exponential endpoint is not representable in the open simplex")
+    endpoint = weights / np.sum(weights)
+    if np.any(endpoint <= 0.0):
+        raise ValueError("exponential endpoint is not representable in the open simplex")
+    return endpoint
 
 
 def exponential_parallel_transport(
@@ -240,10 +282,15 @@ def exponential_parallel_transport(
     if p_vec.shape != q_vec.shape:
         raise ValueError("p and q must have the same shape")
     u_vec = _tangent(p_vec, u)
-    score = u_vec / p_vec
-    transported = q_vec * (score - float(np.dot(q_vec, score)))
-    transported -= np.sum(transported) / transported.size
-    return transported
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        score = u_vec / p_vec
+    if not np.all(np.isfinite(score)):
+        raise ValueError("exponential score is not representable in float64")
+    anchor = int(np.argmax(q_vec))
+    shifted_score = score - score[anchor]
+    centered_score = shifted_score - float(np.dot(q_vec, shifted_score))
+    transported = q_vec * centered_score
+    return _enforce_zero_sum(transported, q_vec)
 
 
 def analogy(

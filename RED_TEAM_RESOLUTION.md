@@ -1,6 +1,6 @@
 # Red-Team Resolution
 
-Date: 2026-08-06; external review rounds appended 2026-08-16
+Date: 2026-08-06; external review rounds appended through 2026-08-18
 
 This file records the disposition of the theoretical and empirical audits. The authoritative formal source is [paper/main.tex](paper/main.tex); the authoritative empirical design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md). Historical notes remain in the repository to show the development of the project, but they do not override those two files.
 
@@ -379,17 +379,326 @@ by a principled Weyl bound: the stored
 \(\|G-G_{\mathrm{float32}}\|_2\), which bounds the eigenvalue perturbation
 introduced by float32 payload quantization, plus numerical slack.
 
+### Round 5 --- combined mathematical closure
+
+The Opus 5 audit reported independent hand derivations of its 16-result core
+table, and a second repository-wide audit found no theorem-level
+counterexample. The current manuscript contains 21 theorem, proposition, and
+corollary environments. A strict proof-environment audit found that four
+corollaries had correct but implicit or omitted proofs. This round made every
+one explicit:
+
+- `cor:intrinsic-field` now follows by differentiating
+  (F_A=F_B\circ\Phi) and using injectivity of (dd F_B);
+- `cor:two-model-convergence` compares both transports to the common target
+  transport and uses the operator-norm triangle inequality, not a nonexistent
+  KL triangle inequality;
+- `cor:connection-decomposition` now explicitly takes the infimum of the
+  pointwise Pythagorean identity; and
+- `cor:cross-model-semantic` now explicitly applies the semantic-obstruction
+  theorem to the transferred model-A field on model B.
+
+All 21 formal results now have explicit proofs. Static validation finds balanced
+LaTeX environments, no duplicate labels, and no undefined references.
+
+The same round strengthened the finite-scale interpretation of the square-root
+Levi--Civita stability theorem. Substituting (D_{LC}) into the
+metric-compatible transport branch gives
+
+\[
+L_\gamma\left[
+\frac{B_1^2(B_1\delta_2+B_2\delta_1)}{\lambda^2}
++\frac{2B_1^4B_2\delta_1}{\lambda^3}
+\right].
+\]
+
+The appendix now records the archived pointwise spectral diagnostics. From
+initialization to `step143000`, the worst inverse, inverse-square, and
+inverse-cube factors grow by approximately (2.31\times10^2),
+(5.34\times10^4), and (1.23\times10^7). This does not alter the theorem, but
+it makes explicit that vocabulary independence does not imply a nonvacuous
+trained-model certificate. The pilot still lacks (B_2), (delta_1),
+(delta_2), and pathwise extrema, so no complete numerical certificate is
+claimed.
+
+### Round 5 remediation --- protocol, code, artifacts, and statistics
+
+The same audit found nine implementation and numerical defects. The current
+checkout resolves them without changing the mathematical results:
+
+- centered-logit Jacobians use the declared `(chart_dimension, outcomes)`
+  layout and remove rowwise softmax gauge;
+- packet refinement uses a stored pure-relative primary tolerance (zero
+  dimensionful absolute floor), supplied
+  exact JVPs are checked independently against finite-difference logits, and
+  algebraic rank, relative conditioning, and absolute chart scale are distinct
+  gates;
+- packet schema v4 binds immutable model/tokenizer/outcome/chart/context/dtype
+  provenance, validates accepted tensors and gate decisions, and refuses
+  untracked training serialization;
+- continuum transport-bound results carry mandatory `certified` or `sampled`
+  status and a source rather than returning an unlabeled scalar;
+- Fisher small-distance/log calculations use a stable chord formula,
+  exponential boundary calculations are stabilized, and unrepresentable
+  float64 endpoints fail closed;
+- the sufficiency API declares empirical versus population-unbiased estimands,
+  the one-dimensional Sobolev audit uses the full grid with composite Simpson
+  quadrature and resolution checks, quantization error is truly relative, and
+  transport-bound overflow returns infinity;
+- new Pythia smoke artifacts use result schema `pythia-smoke-2`, immutable
+  snapshot commits, distinct model/control seed fields, tokenizer/outcome/design
+  hashes, repository state, runtime versions, and lock hashes; and
+- the protocol now specifies the realized crossed/nested sampling analysis,
+  concrete effect/NLL/coverage/feasibility/chart-scale/certificate thresholds,
+  multiplicity hierarchy, intention-to-treat failure handling, and an 80%-power
+  rule.
+
+All 100 model-free unit tests pass, including every adversarial regression from
+the combined audit; Ruff, editable packaging, `pip check`, all three synthetic
+drivers, and a cached one-checkpoint `pythia-smoke-2` run pass. Static manuscript
+checks find no missing citation key, undefined reference, duplicate label,
+unused bibliography entry, or environment imbalance. The PDF remains unbuilt
+because no LaTeX engine is installed.
+
+### Follow-up remediation --- small-chart acceptance and Duhamel sign
+
+A verification pass correctly found that the repaired refinement diagnostic
+could still yield a false acceptance: the shipped \(10^{-6}\) absolute floor
+dominated \(r_{\rm ref}\|L\|\) on small charts. The diagnostic reported the
+large relative discrepancy, but the acceptance ratio used the dimensionful
+absolute leg. The primary defaults now freeze both `refinement_atol=0` and
+`jvp_atol=0`; a nonzero absolute floor is permitted only as a separately
+labeled sensitivity analysis backed by a recorded tensor-specific
+inference/stencil roundoff calculation in the frozen chart.
+
+The new regression constructs an analytic oscillatory Bernoulli chart whose
+first-kind tensor has more than 10% relative error at chart scale \(10^{-4}\).
+The former default accepted it; the primary gate now rejects it as
+`refinement`.
+
+### Follow-up remediation --- chart-invariant acceptance
+
+The \(a_{\rm ref}=0\) repair above over-corrected, and a second verification
+pass found the regression. A pure relative rule on raw tensors is ill posed
+when a tensor is structurally zero: it divides roundoff by roundoff. The
+boundary Bernoulli family has \(\Gamma^{LC}\equiv0\) because
+\(\langle\partial_{\theta\theta}\psi,\partial_\theta\psi\rangle=0\), so
+`build_packet` rejected that family at every \(\theta\), with `metric` and
+`cubic` converged to \(3\times10^{-12}\) and \(1\times10^{-11}\) relative and
+`cubic` equal to \(2\cot\theta\) to eleven digits. The same held for any
+antipodal head at its symmetric point. The rejection reason was also false:
+it read `refinement` when refinement had demonstrably converged, repeating
+the mislabelling that the `rank`/`conditioning`/`metric_scale` split had just
+removed. Acceptance additionally depended on whether roundoff happened to
+cancel to exactly `0.0`, which it does for a one-dimensional symmetric head
+and does not for an antipodal multi-token head. Both were disclosed in a
+code comment, and the closed-form Bernoulli test had been rewritten to assert
+the rejection, so the suite stayed green while the paper's own separating
+family could no longer yield an accepted packet.
+
+Two candidate repairs were rejected on evidence. Restoring a dimensionful
+\(a_{\rm ref}\) reinstates the original chart-scale defect. Deriving
+\(a_{\rm ref}\) from a propagated stencil-roundoff floor was measured and
+fails: the \(56\%\)-error small-chart case has an absolute difference of
+\(6.6\times10^{-16}\), below any defensible roundoff floor, so it would be
+re-admitted.
+
+The accepted repair changes what is compared rather than the tolerance
+constant. The acceptance rule now runs on chart invariants: the dimensionless
+relative metric defect, and the Fisher norms of the raised \(G^{-1}L\) and
+\(G^{-1}C\). Both are unchanged by \(z\mapsto sz\), so \(a_{\rm ref}\) becomes
+dimensionless and the primary gate freezes
+\(a_{\rm ref}=10^{-6}\), \(r_{\rm ref}=10^{-3}\). The reported relative error
+is regularized by the same constant so that it stays well defined at zero
+scale and monotone with the verdict. The JVP audit keeps \(a_{\rm JVP}=0\):
+it compares two estimates of one gauge-centred Jacobian, whose scale cannot
+vanish on a chart direction surviving the rank gate.
+
+Measured behaviour on the seven-case fixture: the boundary Bernoulli family at
+\(\theta=1\) and \(\theta=\pi/2\), an antipodal eight-token head with
+\(L=C=0\), and accurate affine charts are accepted; the \(16.5\%\) and
+\(55.8\%\) small-chart cases are rejected as `refinement`. Across eight orders
+of magnitude of chart units at fixed physical stencil, the refinement
+diagnostic stays at \(3\times10^{-8}\) and the verdict never moves; the only
+surviving unit-dependent gate is the truthfully named `metric_scale`, whose
+preregistered dimensionless partner is `metric_relative_floor`. Two
+regressions lock this in, and the closed-form Bernoulli test asserts
+acceptance again. The packet schema is `pcd-packet-5`: the field names are
+unchanged but `refinement_error`, `refinement_absolute_error`, and
+`refinement_tolerance_ratio` now carry invariant units, so a v4 reader would
+misinterpret them.
+
+The same pass corrected the sign in the packet-to-transport Duhamel display:
+
+\[
+\Phi_T(1,0)-\Phi_S(1,0)
+=\int_0^1\Phi_S(1,s)(A_T(s)-A_S(s))\Phi_T(s,0)\,ds.
+\]
+
+The previous sign did not affect the norm bound, but it was not the exact
+identity under the displayed convention. At that checkpoint the full suite
+contained 100 passing tests.
+
+### Follow-up remediation --- packet release blockers
+
+Four executable attacks against the packet bridge were then accepted. First,
+the nested \((h,h/2,h/4)\) grid could alias a sinusoidal logit perturbation and
+accept a metric with 494% relative error; even a false declared JVP passed
+because its audit reused the aliased grid. Packet construction now requires a
+second \(1/\sqrt2\)-rescaled ladder, checks convergence within both ladders and
+agreement between them, and audits supplied JVPs on both. Exact JVPs form the
+metric and score cubic directly. The original attack is rejected as
+`refinement`, and its false-JVP variant as `jvp_consistency`.
+
+Second, binary32 quantization could make an accepted SPD metric singular while
+the reader retained the pre-quantization eigenvalues and `accepted=True`.
+Schema `pcd-packet-6` stores eigenvalues recomputed from the actual float32
+metric, reruns the ordered gate on that payload, and refuses serialization if
+the verdict changes. The perturbation bound remains diagnostic; it no longer
+serves as tolerance for disagreement with the stored matrix.
+
+Third, a center inside declared chart bounds could use stencil points outside
+them. The builder now validates the largest axial and mixed stencil before the
+first teacher call. Fourth, rejected-packet validation previously trusted any
+recognized reason. It now recomputes the complete ordered gate for accepted
+and rejected records and rejects mismatched reasons. Four adversarial
+regressions cover these cases; the full model-free suite contains 106 tests.
+
+### Round 6 --- mathematics-only red team and the deferred-proofs appendix
+
+A review restricted to the manuscript graded every one of the 21 formal
+results against the standard of a strict analysis course: each hypothesis
+actually used, each "thus" earned, each quantifier and constant tracked. **No
+false statement was found.** Every deduction was of one kind --- a true claim
+presented as immediate --- and their distribution was the finding: the three
+least-justified steps all lay on the single path from "the risk is small" to
+"Levi--Civita transport is close, with constants free of \(N\)", which is the
+paper's advertised contribution.
+
+The repair is Appendix~B, `Deferred proofs`, which supplies fifteen lemmas and
+their proofs and is cross-referenced from every point in the main text that
+previously asserted. The manuscript now contains 36 formal results and 36
+proofs.
+
+**The principal gap.** The proof of the boundary-robust risk-to-transport
+theorem read, in full, "Hilbert-valued Sobolev interpolation and embedding
+give ...". That single clause carries two distinct theorems, neither proved
+nor cited, and the second is the whole of the vocabulary-independence claim:
+a componentwise application of the scalar Sobolev embedding to the \(N\)
+coordinates of \(\psi_p\) produces a factor \(\sqrt N\) and destroys it. The
+appendix now proves both. Lemma `hilbert-interpolation` obtains the
+interpolation inequality with constant exactly one, by Hölder on the scalar
+integrand \((1+|\xi|^2)^r\|\hat f(\xi)\|^2\). Lemma `hilbert-embedding` gives
+the embedding with the explicit constant
+
+\[
+\kappa=(2\pi)^{-m/2}\max_{|\beta|\le k}
+\Bigl(\int_{\mathbb R^m}|\xi|^{2|\beta|}(1+|\xi|^2)^{-r}\,d\xi\Bigr)^{1/2},
+\]
+
+finite exactly when \(r>k+m/2\), by applying Cauchy--Schwarz to two
+nonnegative *scalar* functions of \(\xi\); the Hilbert structure enters only
+through the Bochner triangle inequality and a vector-valued Plancherel lemma,
+so no step refers to the target dimension. Lemma `hilbert-domain` transfers
+both to bounded Sobolev-extension domains and compact manifolds using Stein's
+total extension operator, which is a scalar kernel and therefore has the same
+norms for every target. A discrete check confirms the conclusion: over
+\(N=2,10,10^2,10^3,10^4\) the ratio \(\sup_x\|f(x)\|/\|f\|_{H^r}\) reads
+\(0.00714, 0.00745, 0.00730, 0.00711, 0.00706\) --- flat across four orders of
+magnitude --- and the interpolation ratio stays below one throughout.
+
+**Other deferred proofs now supplied.** The probability-coordinate identity for
+\(\Gamma^{(\alpha)}_{ij,k}\) was used twice and proved nowhere; it is now
+Lemma `lower-alpha`, derived from the paper's own definition by the Koszul
+cancellation. The identification of \(\alpha=\pm1\) with the exponential and
+mixture connections was asserted with "thus" and leaned on twice; it is now
+Lemma `alpha-identification`, which computes \(\Gamma^{(\alpha)}=\frac{1-\alpha}{2}C\)
+on an exponential family from the score-moment form and then shows directly
+that the expectation coordinates \(\eta=\nabla\psi\) are
+\(\nabla^{(-1)}\)-affine. The Hellinger--Kullback inequality
+\(\sum_a(\sqrt{p_a}-\sqrt{q_a})^2\le D_{KL}(p\Vert q)\), the sole bridge from
+risk to square-root coordinates, is now proved from Jensen and
+\(\log t\le t-1\). The two-model \(L^1\) bound silently used Jensen alongside
+the two tools it named; the step is now explicit and flagged as
+non-removable. The kernel identity \(\ker G=\mathcal N\), and the fact that
+the affine-head quotient *embeds* rather than merely injectively immerses,
+are proved via an intermediate log-odds chart. A remark states the hypothesis
+under which a general predictive quotient is a manifold, and records that no
+estimate in the paper needs it.
+
+**Two steps that were correct for unstated reasons.** The mean-value argument
+behind the \(C^2\) stability constant requires the regularity class to be
+*convex*, or the mean-value inequality does not apply along the connecting
+segment; Lemma `lipschitz-class` establishes convexity and compactness first.
+The transport constant \(L_\gamma e^{M_\Gamma L_\gamma}\) is correct only
+because the two Gronwall growth factors, \(e^{M(L_\gamma-s(t))}\) and
+\(e^{Ms(t)}\), multiply to a quantity independent of \(t\); bounding each
+propagator separately gives the weaker \(e^{2M_\Gamma L_\gamma}\). Lemma
+`duhamel-cancellation` performs the cancellation, notes the weaker
+alternative, and records that unequal bounds give
+\(e^{\max\{M,\widetilde M\}L_\gamma}\) --- which also corrects a claim made
+during review that the sum \(M_T+M_S\) in Section 11.3 of the distillation
+protocol was sharp. It is valid but not sharp.
+
+**Scope repair.** Theorem 5.1 is stated on a Euclidean chart and was then
+applied on a compact manifold. Lemma `chart-transfer` supplies the atlas
+argument and states the constants it introduces.
+
+Every new lemma was verified numerically as well as proved: the
+probability-coordinate Christoffel identity and the \(\pm\alpha\) duality
+against an independent Koszul computation on a non-exponential family
+(\(2\times10^{-6}\), the finite-difference floor), the exponential-family
+specialisation and \(g=\mathrm{Hess}\,\psi\) (\(10^{-6}\), \(10^{-8}\)), the
+variance form of \(u^\top Gu\) (exact), and the Duhamel bound against an
+integrated transport (actual \(0.1447\) against the sharp bound \(0.3532\) and
+the naive bound \(1.1531\)).
+
+The static audit reports 36 results, 36 proofs, no undefined reference, no
+duplicate label, no missing citation, no unused bibliography entry, no
+unbalanced environment, and no unreferenced new lemma.
+
+### Follow-up remediation --- confirmatory statistics and release artifacts
+
+The confirmatory distillation claim is now one candidate-level
+intersection--union test per D3/D4 arm. Each global p-value is the maximum over
+behavioral superiority, held-out transport superiority, NLL noninferiority,
+and intention-to-treat feasibility noninferiority against every required
+control. Holm controls the frozen candidate family at 0.05; operation-specific
+claims enlarge that same family. The protocol now fixes the effect directions,
+one scalar behavioral endpoint, a pre-confirmatory D1 standardization scale,
+decision-compatible one-sided bounds, and the distinction between the observed
+0.20-SD gate and a population effect claim. Curvature randomization tests are
+explicitly a separate mechanistic family, and the stale later list of
+"primary comparisons" is now secondary. A versioned sampling/analysis manifest
+and pilot-derived seed count remain mandatory before execution.
+
+The manuscript was rebuilt from a clean directory with Tectonic 0.17.0 after
+making the first-line `\\pdfoutput=1` directive engine-aware. Two overfull
+lines were repaired. The final 31-page build has no undefined references,
+undefined citations, duplicate labels, overfull boxes, or TeX errors. The
+source audit resolves 149 references to 98 unique labels, cites all 20
+bibliography entries with no missing or unused keys, and balances all 36 proof
+environments. All pages were rendered and visually inspected. The generated
+`paper/main.bbl` and `output/pdf/predictive_geometric_agreement.pdf` are the
+verified submission artifacts. Citation review also corrected
+arXiv:2607.04525 from an unsupported ICML/PMLR classification to a preprint.
+
 ### Standing limitations these rounds did not remove
 
-- The committed PDF is stale in mathematical content and must be rebuilt.
-- No independent re-derivation of the manuscript's analysis has been
-  performed; passing tests and surviving review are evidence of care, not
-  proof of correctness.
+- Two adversarial reviews found no mathematical defect, but no complete
+  line-by-line derivation ledger is committed; explicit manuscript proofs and
+  surviving review are evidence of care, not formal certification.
 - The certified surrogate residual of Section 11.4 remains open, so the
   risk--regularity route and any sampled Hölder constants stay conditional.
 - Sections 13.2--13.4 of the distillation protocol --- the real-model packet
   builder, student trainer, and evaluator --- are unimplemented, and no
   empirical semantic result exists.
+- A confirmatory prompt/operation sampling manifest and pilot-derived power
+  calculation do not yet exist; the protocol blocks population claims and a
+  confirmatory run until they do.
+- No software license has been selected. Package metadata and CI configuration
+  now exist, but reuse rights remain intentionally unspecified until the author
+  makes that legal choice.
 
 ## Outcome logic
 

@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-
 Vector = NDArray[np.float64]
 Matrix = NDArray[np.float64]
 

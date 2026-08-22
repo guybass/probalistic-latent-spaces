@@ -1,0 +1,3 @@
+# Core/test environment validated on Python 3.12.13.
+numpy==2.5.1
+ruff==0.14.2

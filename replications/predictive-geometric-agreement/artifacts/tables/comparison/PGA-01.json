@@ -1,0 +1,15 @@
+{
+  "acceptance_mode": "numeric-equivalence",
+  "created_at": "2026-08-19T13:43:31Z",
+  "generated_by": "paper_harness.record-comparison",
+  "kind": "table",
+  "metrics": {
+    "candidate_path": "artifacts/tables/pga-01-kl-counterexample.json",
+    "kl_loglog_slope": "-1.997904548933615",
+    "max_exact_metric_error": "3.469446951953614e-18",
+    "metric_gap_at_zero": "0.004950000000000001",
+    "minimum_probability": "0.2833546063173243"
+  },
+  "schema_version": 1,
+  "target_id": "PGA-01"
+}

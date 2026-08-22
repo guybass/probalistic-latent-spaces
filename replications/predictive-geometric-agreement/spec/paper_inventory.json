@@ -1,0 +1,23 @@
+{
+  "all_tex_files": [
+    "main.tex"
+  ],
+  "appendix_files": [
+    "main.tex"
+  ],
+  "bibliography_references": [
+    "references"
+  ],
+  "checksum": "53af7f013ee125837962bd19f8abe24721255bffa003cf55622c9e5d9bf01084",
+  "data_references": [
+    "_pilot.json"
+  ],
+  "entrypoint": "main.tex",
+  "figure_references": [],
+  "source_root": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\paper",
+  "suspect_unreferenced_tex_files": [],
+  "tex_files": [
+    "main.tex"
+  ],
+  "unreferenced_tex_files": []
+}

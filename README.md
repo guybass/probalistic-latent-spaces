@@ -26,27 +26,41 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 
 - [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md): plain-language explanation of what is proved, what the pilot observed, and what remains open.
 - [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md): current CPU protocol, spectrum-matched controls, numerical gates, finite-edge safeguards, falsification criteria, and the execution-only Pythia-14M pilot.
+- [replications/README.md](replications/README.md): persistent paper-replication harnesses with independent code, run provenance, claim-specific evidence, and fail-closed completion gates.
 - [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md): disposition of every substantive theoretical, empirical, and implementation audit finding, including the external review rounds.
+- [RED_TEAM_ROUND5.md](RED_TEAM_ROUND5.md): strict domain-separated audit
+  (mathematics, manuscript, protocol, code, tests, artifacts, statistics,
+  reproducibility, and public claims) with the current remediation table.
 - [TRAINING_REGIMES.md](TRAINING_REGIMES.md): proposed matched training objectives; these remain future experiments rather than supported conclusions.
 - [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md): unified teacher--student protocol combining the KL--Sobolev Levi--Civita guarantee with direct \((G,L,C)\) packet distillation, derivative controls, CPU curriculum, and falsification criteria.
 - [BROAD_HYPOTHESIS_PROGRAM.md](BROAD_HYPOTHESIS_PROGRAM.md), [MSC_NOVELTY_PROPOSAL.md](MSC_NOVELTY_PROPOSAL.md), [PROOFS_AND_NOVELTY.md](PROOFS_AND_NOVELTY.md), and [RESEARCH_NOTES.md](RESEARCH_NOTES.md): historical development notes, superseded wherever they conflict with the manuscript or protocol.
 
 ## Implemented code
 
-- `src/predictive_geometry/simplex.py`: exact mixture, exponential, and Fisher--LC operations on the open categorical simplex.
+- `src/predictive_geometry/simplex.py`: mixture, exponential, and Fisher--LC
+  operations on the open categorical simplex, with stable small-distance and
+  boundary calculations and explicit failure when float64 cannot represent a
+  valid endpoint.
 - `src/predictive_geometry/softmax.py`: exact decoder Fisher metric, cubic tensor contractions/operators, curvature commutators, and sectional curvature from vocabulary cumulants.
 - `src/predictive_geometry/stability.py`: square-root cubic diagnostics and executable finite-scale Levi--Civita stability bounds, including the metric-compatible transport refinement.
 - `src/predictive_geometry/field.py`: alpha-connection transport, local transport defect, and semantic connection fitting.
 - `src/predictive_geometry/benchmark.py`: held-out semantic quadrilateral benchmark with feasibility, Fisher error, KL/JS error, and transport metric distortion.
-- `src/predictive_geometry/distillation.py`: validated shared-chart connection packets with float64-logit/JVP score-moment cubics, distillation losses, acceptance gates, all-field checksummed serialization, whole-context negative controls, and conditional packet-to-connection and packet-to-transport bounds.
+- `src/predictive_geometry/distillation.py`: validated schema-v6 shared-chart
+  packets with immutable provenance and full-stencil bounds, float64-logit/JVP
+  score-moment cubics, nested plus incommensurate refinement audits, gates
+  recomputed after float32 serialization, separate rank/conditioning/scale
+  gates, all-field checksums, whole-context controls, explicit sufficiency
+  estimands, and typed certified-versus-sampled transport bounds.
 - `experiments/synthetic_validation.py`: Fisher-sphere and holonomy checks.
-- `experiments/synthetic_connection_recovery.py`: recovers synthetic mixture-, exponential-, and Fisher-generated compositions.
-- `experiments/pythia_cpu_smoke.py`: real Pythia checkpoint inference and curvature on CPU.
+- `experiments/synthetic_connection_recovery.py`: independently generates
+  closed-form mixture, exponential, and Fisher targets for regression testing.
+- `experiments/pythia_cpu_smoke.py`: real Pythia checkpoint inference and
+  curvature on CPU with versioned result and immutable snapshot provenance.
 - `experiments/synthetic_semantic_alpha.py`: recovers known synthetic semantic connections with NumPy only.
 
 ## Verification status
 
-- The complete automated CPU suite passes.
+- All 106 model-free unit tests pass in the remediated checkout; Ruff passes.
 - Saturated three-category curvature recovers \(K=1/4\), including a near-boundary stress test.
 - Curvature is invariant under invertible hidden-coordinate changes.
 - The curvature-operator commutator and hidden-translation metric-derivative identities are checked numerically.
@@ -55,16 +69,32 @@ The manuscript and experiment protocol are authoritative. The older proof and pr
 - A real Pythia-14M pilot ran at four checkpoints with no GPU.
 - Small raw pilot JSON outputs are included under `results/`; downloaded model weights are excluded.
 
-The pilot is an implementation result, not evidence for a scientific conclusion: it uses one seed, three prompt families, and eight Fisher-Haar controls. Those controls are not spectrum matched and cannot resolve a one-sided Monte Carlo p-value below \(1/9\).
+The pilot is an implementation result, not evidence for a scientific conclusion: it uses one pretrained model run, three prompt families, and eight Fisher-Haar controls. Its LC length preservation and flat-connection closure checks are mathematical identities used as implementation oracles, not measurements supporting a semantic claim. The controls are not spectrum matched and cannot resolve a one-sided Monte Carlo p-value below \(1/9\).
+
+The model-free predictive-connection packet core is implemented with a
+versioned checksummed schema, immutable provenance, a fail-closed invariant
+mixed refinement gate, incommensurate-stencil and exact-JVP audits, and
+adversarial regression tests. Real-model
+packet generation and student training remain prospective.
 
 ## Run tests
 
 ```powershell
-$env:PYTHONPATH=(Join-Path (Get-Location) 'src')
+.\.venv\Scripts\python.exe -m pip install -e ".[test]"
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+ruff check src tests experiments
 ```
 
-The model-free geometry requires only NumPy. The Pythia experiment additionally requires CPU-only PyTorch, Transformers, and Safetensors; see `requirements-model.txt`.
+The model-free geometry requires only NumPy. `requirements-lock.txt` records the
+exact core environment validated in this repository; `pyproject.toml` contains
+the supported package ranges. The Pythia experiment additionally requires a
+platform-specific CPU-only PyTorch wheel, Transformers, and Safetensors; see
+`requirements-model.txt` for ranges and `requirements-model-lock.txt` for the
+audited versions. CI runs lint and all model-free tests on Windows and Linux.
+
+No repository software license has been selected. Until the author chooses and
+adds one, source availability must not be described as permission to reuse or
+redistribute the code.
 
 ## Current MSc research target
 

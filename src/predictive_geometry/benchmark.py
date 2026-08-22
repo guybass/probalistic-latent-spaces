@@ -20,7 +20,6 @@ from .simplex import (
     mixture_parallel_transport,
 )
 
-
 Vector = NDArray[np.float64]
 CONNECTIONS = ("mixture", "exponential", "fisher")
 

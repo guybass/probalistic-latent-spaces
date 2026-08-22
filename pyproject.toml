@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "predictive-fisher-geometry"
+version = "0.1.0"
+description = "Predictive Fisher--Amari geometry and connection-distillation research code"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+model = [
+    "safetensors>=0.5",
+    "transformers>=5.0",
+]
+test = [
+    "ruff==0.14.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 96
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "W"]

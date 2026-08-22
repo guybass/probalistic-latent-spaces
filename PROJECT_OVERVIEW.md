@@ -1,6 +1,6 @@
 # Project overview
 
-> **Current status (12 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion. Predictive connection distillation is now formally specified but not implemented.
+> **Current status (17 August 2026).** The authoritative mathematics is [paper/main.tex](paper/main.tex), the corrected CPU design is [EXPERIMENT_PROTOCOL.md](EXPERIMENT_PROTOCOL.md), and the full adversarial-audit disposition is [RED_TEAM_RESOLUTION.md](RED_TEAM_RESOLUTION.md). The historical Pythia pilot validates execution only; its eight Fisher-Haar controls are spectrally unmatched and cannot support a semantic conclusion. The model-free predictive-connection packet core and adversarial tests are implemented; real-model packet generation, student training, and evaluation are not.
 
 ## The 30-second version
 
@@ -208,11 +208,15 @@ Within a connection family fixed independently of the data and tested out of sam
 
 ### Preliminary Pythia-14M observation
 
-Across four checkpoints, one seed, three hand-written semantic factorials, and eight Fisher-Haar planes per context:
+Across four repeated-measure checkpoints from one pretrained model run, three
+hand-written semantic factorials, and eight Fisher-Haar planes per context:
 
 - metric condition numbers changed from about $1.27$ at initialization to roughly $3.1\times10^3$--$4.2\times10^3$ at the final checkpoint;
 - semantic sectional curvature changed from roughly $0.001$ at initialization to values between $-0.0445$ and $0.0211$ at the final checkpoint;
-- LC Fisher-length distortion stayed below $1.3\times10^{-16}$, while final-checkpoint mean absolute distortion was $0.0877$ for exponential and $0.4389$ for mixture transport;
+- LC Fisher-length distortion stayed below $1.3\times10^{-16}$ as an
+  implementation check of the metric-compatibility identity, while
+  final-checkpoint mean absolute distortion was $0.0877$ for exponential and
+  $0.4389$ for mixture transport;
 - unscaled finite mixture and ambient LC analogies left their valid domains, while exponential composition remained feasible.
 
 These are engineering results, not semantic evidence. The planes were not spectrum matched, eight controls permit no plus-one tail rank below \(1/9\), and that rank is not automatically a calibrated p-value for a hand-selected semantic plane. Semantic-minus-Haar differences were strongly confounded with metric conditioning, while entropy and conditioning also changed simultaneously.

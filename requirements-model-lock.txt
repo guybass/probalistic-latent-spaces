@@ -1,0 +1,6 @@
+# Optional CPU experiment environment validated on Python 3.12.13.
+--extra-index-url https://download.pytorch.org/whl/cpu
+numpy==2.5.1
+torch==2.13.0+cpu
+safetensors==0.8.0
+transformers==5.14.1

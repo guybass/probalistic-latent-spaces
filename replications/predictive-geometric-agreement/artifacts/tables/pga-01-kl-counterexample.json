@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "target_id": "PGA-01",
+  "method": {
+    "base": "r(x)=1/3+x/20",
+    "candidate": "r_n(x)=r(x)+sin(nx)/(100n)",
+    "supremum_estimator": "fixed dense grid on the declared domain"
+  },
+  "results": {
+    "g_star_at_zero": 0.011250000000000001,
+    "g_n_at_zero": 0.016200000000000003,
+    "metric_gap_at_zero": 0.004950000000000001,
+    "max_exact_metric_error": 3.469446951953614e-18,
+    "minimum_probability": 0.2833546063173243,
+    "kl_loglog_slope": -1.997904548933615,
+    "kl_grid_records": [
+      {
+        "n": 25,
+        "max_grid_kl": 3.913766883202152e-07,
+        "n_squared_max_grid_kl": 0.0002446104302001345
+      },
+      {
+        "n": 50,
+        "max_grid_kl": 9.819479641987798e-08,
+        "n_squared_max_grid_kl": 0.00024548699104969495
+      },
+      {
+        "n": 100,
+        "max_grid_kl": 2.4593054034143208e-08,
+        "n_squared_max_grid_kl": 0.0002459305403414321
+      },
+      {
+        "n": 200,
+        "max_grid_kl": 6.153831524016045e-09,
+        "n_squared_max_grid_kl": 0.0002461532609606418
+      },
+      {
+        "n": 400,
+        "max_grid_kl": 1.537872749614056e-09,
+        "n_squared_max_grid_kl": 0.00024605963993824895
+      }
+    ]
+  },
+  "checks": {
+    "exact_metric_constants": true,
+    "uniform_interiority": true,
+    "quadratic_kl_rate": true,
+    "metric_nonconvergence": true
+  },
+  "accepted": true,
+  "caveat": "The grid supports the rate check but does not replace the paper's analytic uniform-interiority and Taylor argument."
+}

@@ -9,7 +9,36 @@ from .benchmark import (
     kl_divergence,
     predict_composition,
 )
-
+from .distillation import (
+    ConnectionPacket,
+    PacketProvenance,
+    TransportBoundAudit,
+    alpha_connection,
+    build_packet,
+    build_packet_from_logits,
+    centered_logit_jacobian_loss,
+    context_shuffled_cubics,
+    levi_civita_loss,
+    metric_relative_loss,
+    packet_connection_bound,
+    packet_from_dict,
+    packet_to_dict,
+    packet_transport_bound,
+    quantization_error,
+    raised_cubic_loss,
+    sobolev_grid_audit,
+    sqrt_jacobian_loss,
+    sufficiency_decomposition,
+    tensor_operator_norm,
+)
+from .field import (
+    SemanticConnectionFit,
+    alpha_parallel_transport,
+    first_order_alpha_transport,
+    fit_semantic_alpha,
+    local_transport_defect_scalar,
+    softmax_probabilities,
+)
 from .simplex import (
     FISHER_RADIUS,
     analogy,
@@ -40,34 +69,6 @@ from .stability import (
     LeviCivitaStabilityBounds,
     levi_civita_stability_bounds,
     square_root_cubic_tensor,
-)
-from .field import (
-    SemanticConnectionFit,
-    alpha_parallel_transport,
-    first_order_alpha_transport,
-    fit_semantic_alpha,
-    local_transport_defect_scalar,
-    softmax_probabilities,
-)
-from .distillation import (
-    ConnectionPacket,
-    alpha_connection,
-    build_packet,
-    build_packet_from_logits,
-    centered_logit_jacobian_loss,
-    context_shuffled_cubics,
-    levi_civita_loss,
-    metric_relative_loss,
-    packet_connection_bound,
-    packet_from_dict,
-    packet_to_dict,
-    packet_transport_bound,
-    quantization_error,
-    raised_cubic_loss,
-    sobolev_grid_audit,
-    sqrt_jacobian_loss,
-    sufficiency_decomposition,
-    tensor_operator_norm,
 )
 
 __all__ = [
@@ -110,6 +111,8 @@ __all__ = [
     "local_transport_defect_scalar",
     "softmax_probabilities",
     "ConnectionPacket",
+    "PacketProvenance",
+    "TransportBoundAudit",
     "alpha_connection",
     "build_packet",
     "build_packet_from_logits",

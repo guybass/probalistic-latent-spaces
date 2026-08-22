@@ -1,0 +1,17 @@
+{
+  "appendix_files": [
+    "main.tex"
+  ],
+  "bibliography_references": [
+    "references"
+  ],
+  "data_references": [
+    "_pilot.json"
+  ],
+  "entrypoint": "main.tex",
+  "figure_assets": [],
+  "source_root": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\paper",
+  "tex_files": [
+    "main.tex"
+  ]
+}

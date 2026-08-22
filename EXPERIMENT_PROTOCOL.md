@@ -1,6 +1,6 @@
 # CPU-Only Experiment Protocol
 
-Date: 2026-08-11
+Date: 2026-08-17
 Primary objects: ambient decoded intervention geometry and declared support-relative charts
 
 ## 1. Research question
@@ -16,6 +16,15 @@ The experiment also asks whether exact Fisher--LC sectional curvature of semanti
 The goal is not to demonstrate that the full categorical simplex is curved; that curvature is already known to be \(1/4\).
 
 ## 2. Pre-registered objects and claims
+
+Claims are reported in three noninterchangeable classes. **Mathematical
+identities** (for example LC metric compatibility and flat-connection closure
+on their natural domains) are proved properties and are tested only as
+implementation oracles. **Numerical validation claims** establish that a
+specific implementation attains declared residual and refinement tolerances.
+**Empirical scientific claims** concern learned models and require the sampling,
+controls, uncertainty, and multiplicity rules below. Passing an identity check
+does not count as empirical support.
 
 ### Object A: decoded intervention manifold
 
@@ -155,10 +164,15 @@ Discovery run:
 
 Confirmation run:
 
-- at least five Pythia-70M seeds;
-- five to seven fixed checkpoints;
-- at least 30 base prompts from at least ten templates;
-- a frozen prompt file selected before inspecting curvature.
+- the number of independently trained Pythia-70M runs returned by the
+  Section 9 simulation-based 80%-power calculation, not a fixed five-seed
+  rule;
+- five to seven fixed checkpoints, treated as repeated measurements;
+- a versioned prompt/operation manifest sized by the same power and
+  interval-width analysis, with target frame, inclusion rules, and selection
+  mechanism recorded; and
+- the frozen manifest and split committed before inspecting curvature or
+  behavioral outcomes.
 
 Pythia is appropriate because the [official project](https://github.com/EleutherAI/pythia) provides 154 checkpoints and multiple small model sizes under a consistent training setup.
 
@@ -202,7 +216,7 @@ q_+=\frac{1+\#\{K_b\ge K_{\mathrm{sem}}\}}{B+1},
 q_-=\frac{1+\#\{K_b\le K_{\mathrm{sem}}\}}{B+1}.
 \]
 
-These ranks are calibrated randomization p-values only under the stated conditional group-invariance null; otherwise they are descriptive reference-tail ranks. The primary alternative is two-sided, \(\min(1,2\min(q_+,q_-))\), with Holm correction across the preregistered context-by-checkpoint family. Do not convert fewer than 30 control draws into Gaussian z-tests. The completed eight-plane pilot has minimum attainable tail rank \(1/9\) and is execution-only.
+These ranks are calibrated randomization p-values only under the stated conditional group-invariance null; otherwise they are descriptive reference-tail ranks. The curvature-family alternative is two-sided, \(\min(1,2\min(q_+,q_-))\), with Holm correction across the preregistered context-by-checkpoint family. This is a separate mechanistic family: it neither enters nor establishes the Section 8.3 distillation claim. If curvature and distillation are promoted to co-primary program-level claims, freeze an outer multiplicity procedure across their global hypotheses before data inspection. Do not convert fewer than 30 control draws into Gaussian z-tests. The completed eight-plane pilot has minimum attainable tail rank \(1/9\) and is execution-only.
 
 ### 5.4 Exact computation
 
@@ -307,6 +321,13 @@ Results from these two comparison levels must not be pooled.
 \[
 e_\nabla=d_{FR}(\widehat p_{11}^\nabla,p_{11}).
 \]
+
+This is an error, so lower values are better. In the confirmatory analysis the
+corresponding behavioral score is \(S_{\rm beh}=-e_\nabla\), so every
+superiority contrast is oriented with higher values better. A different
+behavioral endpoint may replace it only if one scalar endpoint, its direction,
+transformation, and aggregation are frozen in the versioned analysis manifest
+before confirmatory training; no best-looking endpoint may be selected later.
 
 Secondary outcomes:
 
@@ -499,7 +520,17 @@ Numerical QA identities are
 \langle x,x_{ij}\rangle=-g_{ij}.
 \]
 
-Use fourth-order stencils and spacings \(h,h/2,h/4\). Accept a result only on a visible convergence plateau.
+Use fourth-order stencils and spacings \(h,h/2,h/4\). Freeze the primary
+absolute tolerance at zero before inspecting results and accept only when
+
+\[
+\|T_{h/2}-T_{h/4}\|
+\le a_{\rm ref}+r_{\rm ref}\max\{\|T_{h/2}\|,\|T_{h/4}\|\}.
+\]
+
+Store both errors and the tolerance ratio; a visually selected plateau is not
+an acceptance rule. A nonzero absolute floor is a separately labeled
+sensitivity analysis and requires a tensor-specific propagated roundoff bound.
 
 For an independent holonomy check, integrate intrinsic LC transport around a small loop and compare its angle to
 
@@ -511,8 +542,9 @@ Repeat with alternative interpolation charts through the same corners. Strong ch
 
 ## 8. Experiment E: predictive connection distillation
 
-This experiment is prospective and not yet implemented. Its authoritative
-training and packet specification is
+The model-free packet core and its synthetic tests are implemented; real-model
+packet generation, student training, and evaluation remain prospective. The
+authoritative training and packet specification is
 [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md).
 
 ### 8.1 Primary setup
@@ -529,8 +561,9 @@ training and packet specification is
   geometric sidecar, and float64 output anchors unless an error-bounded output
   compression is declared;
 - adapter or final-block student training with the LM head frozen;
-- four seeds with identical initialization and a frozen example order across
-  arms;
+- four independent training seeds for the engineering pilot, paired by
+  initialization and frozen example order across arms; the confirmatory seed
+  count is chosen by the simulation-based power rule in Section 9;
 - NLL-matched selection or a preregistered behavior--NLL Pareto frontier.
 
 The primary training comparison fixes total student-training FLOPs or wall
@@ -590,14 +623,16 @@ chart output-KD term is evaluated at the identical full stencil-point set in
 every arm, making D1 the stencil-matched exposure control.
 [PREDICTIVE_CONNECTION_DISTILLATION.md](PREDICTIVE_CONNECTION_DISTILLATION.md)
 Section 7 is authoritative for arm definitions.
-The primary contrasts are D2--D1, D3--D2, D4--D3, and
-D4--D5, with the additional mandatory comparisons Jpsi--Jz and D3--Jpsi.
+The preregistered mechanistic contrasts are D2--D1, D3--D2, D4--D3, and
+D4--D5, with the additional comparisons Jpsi--Jz and D3--Jpsi. This list does
+not make every contrast a separate confirmatory claim: Section 9 defines the
+global candidate-arm hypotheses and multiplicity procedure.
 The Jacobian arms separate generic derivative distillation, oriented
 square-root tangent matching, and intrinsic Gram-metric matching. D6 is run only
 after finite-difference packets and pointwise connection training pass their
 held-out numerical checks.
 
-### 8.3 Primary outcomes
+### 8.3 Distillation outcomes and confirmatory success
 
 Report held-out NLL, output KL, centered-logit and square-root Jacobian defects,
 metric defect, measured \(H^{s_*}\) envelope, LC connection defect, raised cubic
@@ -608,13 +643,22 @@ map or complete declared coarsening only, additionally report the
 fixed-representation conditional-variance obstruction and cross-model
 conditional-mean-field mismatch in the student metric.
 
-A positive result requires a connection arm to improve held-out transport and a
-preregistered behavioral outcome beyond D1/Jz/Jpsi/D2 at matched compute and
-matched NLL, or on a preregistered behavior--NLL Pareto frontier, with
-paired seed effects and hierarchical bootstrap intervals clearing a
-preregistered practical-effect threshold (four seeds is a preliminary pilot
-scale; three-of-four counting is a stopping rule, not a confirmatory
-standard), survive rank and stencil sensitivity, and
+A positive result requires D3 or D4 to reject its Section 9 global
+intersection-union null after Holm correction. Thus the candidate must improve
+held-out transport and the preregistered behavioral outcome beyond every
+required control while satisfying validation-NLL and feasibility
+noninferiority at matched compute, with
+at least 90% packet acceptance overall and 80% in each frozen
+context-by-operation stratum, validation NLL within 0.01 nats/token of each
+required control, a minimum behavioral point improvement of at least 0.20
+frozen D1-pilot between-seed standard deviations, the decision-compatible and
+unadjusted one-sided confidence bounds defined in Section 9 for every
+global-test component, held-out
+Fisher-alignment singular values in \([0.5,2]\), and any claimed relative
+transport certificate at most 0.10. In every frozen stratum, the student's
+median declared-intervention Fisher length must be at least 90% of D1's. It
+must survive rank, chart-scale, and
+stencil sensitivity and
 generalize to contexts and operations excluded from packet construction. Lower
 packet loss alone is not evidence of useful compression.
 
@@ -623,13 +667,47 @@ packet loss alone is not evidence of useful compression.
 - construct packets in the declared float64 teacher inference dtype, with
   score-moment cubics from JVPs or logit central differences as primary and
   the probability-difference cubic as audit;
+- bind every serialized packet to an immutable teacher revision, tokenizer and
+  outcome-map hashes, chart identifier and bounds, context identifier, and
+  inference dtype; require those bounds to contain every axial and mixed
+  stencil point and fail before teacher evaluation otherwise; untracked
+  accepted packets are invalid training artifacts;
 - reject nonfinite, nonpositive, or unnormalized probability vectors rather
   than clipping or silently excluding outcomes; casting lower-precision model
   outputs to float64 after inference does not satisfy the dtype contract;
-- refine central differences at \((h,h/2,h/4)\) and accept via a
-  Richardson-style preregistered relative tolerance, not a visually judged
-  plateau;
-- require teacher and student Fisher spectral floors on the declared chart;
+- refine central differences on both \((h,h/2,h/4)\) and the incommensurate
+  ladder \((h/\sqrt2,h/(2\sqrt2),h/(4\sqrt2))\); require internal Richardson
+  convergence on each ladder and agreement between their fine extrapolants.
+  Compare only chart-invariant quantities. For the metric,
+  use
+  \(d_G=\|G_2^{-1/2}(G_1-G_2)G_2^{-1/2}\|_F\) with
+  \(s_G=\sqrt m\). For each \(X\in\{L,C\}\), raise each extrapolant with its
+  own metric, \(\Gamma_{X,k}=G_k^{-1}X_k\), and use the Fisher norm induced by
+  the fine metric:
+  \(d_X=\|\Gamma_{X,1}-\Gamma_{X,2}\|_{G_2}\) and
+  \(s_X=\max(\|\Gamma_{X,1}\|_{G_2},\|\Gamma_{X,2}\|_{G_2})\).
+  Require \(d_Y\le a_{\rm ref}+r_{\rm ref}s_Y\) for every
+  \(Y\in\{G,L,C\}\), and store the maxima of
+  \(d_Y/\max(s_Y,a_{\rm ref})\), \(d_Y\), and
+  \(d_Y/(a_{\rm ref}+r_{\rm ref}s_Y)\). The primary analysis freezes the
+  dimensionless values \(a_{\rm ref}=10^{-6}\) and
+  \(r_{\rm ref}=10^{-3}\). The absolute term means only that an invariant
+  coefficient below the declared numerical threshold is treated as
+  indistinguishable from zero by this gate; it is not a proof that the exact
+  coefficient vanishes. Never apply a dimensionful floor to raw \(G,L,C\)
+  tensors or silently replace their norm scale by one;
+- when exact logit JVPs are supplied, require a logits function and independently
+  compare its finite-difference Jacobian after removing the rowwise softmax
+  gauge, with primary absolute floor zero and any nonzero sensitivity floor
+  derived and recorded as above;
+- after float32 sidecar conversion, recompute the metric eigenvalues and the
+  complete ordered gate from the actual serialized tensors and stored
+  diagnostics; refuse serialization if quantization changes the verdict, and
+  require every rejected packet's reason to equal the recomputed first failing
+  gate;
+- report algebraic rank, relative conditioning, and absolute chart-scale
+  failures separately; require teacher and student Fisher spectral floors on
+  the declared chart;
 - audit the theorem-matched integer Sobolev order
   \(s_*=\min\{k\in\mathbb N:k>2+m/2\}\); label an \(H^2\)-style roughness
   penalty as heuristic rather than theorem sufficient;
@@ -644,7 +722,9 @@ packet loss alone is not evidence of useful compression.
 
 Model outputs are deterministic. Vocabulary entries and finite-difference grid points are not independent observations.
 
-Sampling units are:
+The only automatically independent units are independently initialized and
+trained model runs. The following are design factors, not a list of mutually
+independent units:
 
 - training seed;
 - prompt template;
@@ -652,9 +732,115 @@ Sampling units are:
 - semantic operation;
 - checkpoint as a repeated measurement.
 
-Use paired checkpoint comparisons. For uncertainty, hierarchically bootstrap seeds and templates while preserving the checkpoint pairing. Report effect sizes and intervals, not a p-value over vocabulary entries.
+Freeze the population or finite sampling frame for prompt templates, lexical
+items, and operations before training. Record which factors are crossed and
+which are nested. Use paired arm and checkpoint comparisons. For uncertainty,
+resample trained seeds first and then resample prompt families and lexical
+items within their realized nesting; if prompt and operation are crossed, use
+a multiway cluster bootstrap or a crossed random-effects model. Preserve all
+arm and checkpoint pairing. Report independent-model count separately from
+prompt, packet, and token counts, and report effect sizes and intervals rather
+than a p-value over vocabulary entries.
 
-Primary comparisons:
+The three hard-coded factorials in the historical smoke driver are a finite
+convenience set and support inference only to those prompts. The confirmatory
+run is blocked until a versioned manifest defines the target prompt/operation
+frame, inclusion and exclusion rules, selection probabilities or complete
+enumeration, and train/validation/test split. Unless a probability sample from
+a named superpopulation is supplied, all confirmatory intervals are explicitly
+finite-manifest intervals and no broader prompt-population generalization is
+claimed.
+
+The confirmatory unit is a candidate connection arm. Its required control sets
+are
+
+\[
+\mathcal B_{D3}=\{D1,J_z,J_\psi,D2\},
+\qquad
+\mathcal B_{D4}=\{D1,J_z,J_\psi,D2,D3\},
+\]
+
+with D5 added to \(\mathcal B_{D4}\) when cubic orientation is part of the
+confirmatory claim.
+
+The versioned analysis manifest must name one scalar behavioral score
+\(S_{\rm beh}\), with higher values better, and freeze its transformation,
+aggregation over the prompt/operation frame, fitted model or resampling
+statistic, missing-data rule, and number of resamples before confirmatory
+training. For the Section 6.3 composition endpoint,
+\(S_{\rm beh}=-e_\nabla\). Freeze
+\(s_{\rm beh}>0\) as the D1 between-seed standard deviation estimated in the
+engineering pilot; do not re-estimate it from unblinded confirmatory outcomes.
+For each candidate \(C\) and each \(B\in\mathcal B_C\), define
+
+\[
+\Delta^{\rm beh}_{C,B}
+=\frac{\mathbb E(S_{{\rm beh},C}-S_{{\rm beh},B})}{s_{\rm beh}},
+\quad
+\Delta^{\rm tr}_{C,B}=\mathbb E(E_{{\rm tr},B}-E_{{\rm tr},C}),
+\]
+
+\[
+\Delta^{\rm NLL}_{C,B}
+=\mathbb E(\operatorname{NLL}_C-\operatorname{NLL}_B),
+\qquad
+\Delta^{\rm feas}_{C,B}=\pi_C-\pi_B.
+\]
+
+Obtain from the frozen seed-first analysis one-sided p-values for the nulls
+\(\Delta^{\rm beh}_{C,B}\le0\),
+\(\Delta^{\rm tr}_{C,B}\le0\),
+\(\Delta^{\rm NLL}_{C,B}\ge0.01\), and
+\(\Delta^{\rm feas}_{C,B}\le-0.02\). Define
+
+\[
+p_C=\max_{B\in\mathcal B_C}
+\max\{p^{\rm beh}_{C,B},p^{\rm tr}_{C,B},
+p^{\rm NLL}_{C,B},p^{\rm feas}_{C,B}\}.
+\]
+
+This is an intersection-union p-value: the candidate succeeds only when every
+required component rejects, so no within-candidate multiplicity adjustment is
+needed. Apply Holm at familywise 0.05 to \(p_{D3}\) and \(p_{D4}\): compare the
+smaller with 0.025 and, only if it rejects, the larger with 0.05. Report every
+component estimate and raw p-value, plus the standard Holm-adjusted global
+p-value for each candidate. If a candidate is reached at Holm local level
+\(\alpha_C\), invert the same analysis to report decision-compatible one-sided
+bounds at level \(1-\alpha_C\): every behavioral and transport lower bound must
+exceed zero, every NLL upper bound must be below 0.01, and every feasibility
+lower bound must exceed \(-0.02\). Also report ordinary unadjusted 95%
+one-sided bounds for estimation; they do not override the Holm decision. The
+observed practical-effect gate is
+\(\min_{B\in\mathcal B_C}\widehat\Delta^{\rm beh}_{C,B}\ge0.20\); it is not a
+confidence claim that the population effect is at least 0.20.
+
+Packet coverage, Fisher alignment, intervention length, certificate, and
+numerical-sensitivity thresholds are deterministic conjunctive gates after the
+Holm decision. Failed seeds and infeasible paths remain in the
+intention-to-treat analysis; conditional error among jointly feasible paths is
+reported afterward. The confirmatory analysis uses the stated NLL
+noninferiority margin. Pareto-frontier analyses are exploratory unless a
+dominance statistic and multiplicity family are separately frozen.
+
+If cubic orientation is claimed, preregister D5 and include D4--D5 behavioral
+and transport superiority plus NLL and feasibility noninferiority inside
+\(p_{D4}\), subject to comparable geometric-loss floors. Without D5, D4 may
+support only a generic connection-distillation claim. Operation-specific
+claims add global hypotheses to the Holm family before data inspection; with
+\(m\) frozen global hypotheses, use the complete \(m\)-step Holm procedure
+rather than the two-candidate shortcut. Jpsi--Jz, D2--D1, regularity
+variants, D6, and geometric mechanism outcomes are secondary unless a separate
+confirmatory family is frozen.
+
+Before a confirmatory run, simulate this frozen multilevel design and the full
+intersection-union/Holm decision rule using the
+engineering-pilot variance components and choose enough independent training
+seeds for at least 80% power to detect a 0.20 frozen-D1-pilot-standard-deviation
+behavioral improvement after the stated multiplicity correction. Four or five
+seeds alone is a pilot scale, not a confirmatory sample-size justification.
+
+Secondary mechanistic analyses (not members of the Section 9 confirmatory
+family):
 
 1. paired change in semantic curvature from step 0 to final;
 2. semantic minus spectrum-matched-control curvature at the same base, with Fisher-Haar curvature reported separately;
@@ -709,14 +895,27 @@ Checks:
 - all 12 decoded metrics passed the full-rank numerical check;
 - exponential output composition was feasible in all 24 orientations;
 - unscaled mixture and ambient LC composition were feasible in 0 of 24 orientations each.
-- LC transport's mean absolute log-length distortion stayed below \(1.3\times10^{-16}\),
-  as required by metric compatibility. At the final checkpoint the corresponding
+- LC transport's mean absolute log-length distortion stayed below \(1.3\times10^{-16}\).
+  This is an implementation-identity check implied by metric compatibility,
+  not an empirical measurement supporting H1--H6. At the final checkpoint the corresponding
   pilot values were \(0.0877\) for exponential transport and \(0.4389\) for mixture
   transport.
 
 Interpretation: the exact curvature is computable and differs strongly across training, planes, and contexts. The Fisher-Haar comparison is confounded by the semantic plane's alignment with the Fisher spectrum, especially as metric conditioning grows. The pilot therefore does **not** establish a trend or semantic effect. It also shows that finite-domain feasibility must be part of the connection comparison.
 
 Raw local result: `results/pythia_14m_pilot.json`.
+
+That archived file uses the legacy unversioned result schema. New smoke outputs
+use schema `pythia-smoke-2` and record the repository commit and dirty flag,
+Python/platform/package versions, requested and resolved model revisions,
+model-run identifier, declared model-training seed when known, base and
+per-control seeds, tokenizer/outcome hashes, and a design hash. A missing
+training seed is represented as unknown, never inferred from the number of
+checkpoint records. Checkpoints from one pretrained run are repeated measures,
+not independent seeds. The driver refuses to create a scientific artifact from
+an unidentified or dirty checkout by default. `--allow-dirty-repository` is an
+explicit smoke-only override; the payload records the override and driver
+source hash and is not a reproducible result.
 
 ## 12. Commands
 

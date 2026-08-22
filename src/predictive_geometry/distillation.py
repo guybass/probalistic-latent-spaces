@@ -20,20 +20,17 @@ non-finite at numerical extremes without corrupting the primary estimator.
 
 from __future__ import annotations
 
-from collections.abc import Hashable
-from dataclasses import dataclass
 import hashlib
 import math
 import struct
+from collections.abc import Hashable
+from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
 import numpy as np
 from numpy.typing import NDArray
 
-
-SCHEMA_VERSION = "pcd-packet-3"
-
-_TRAPEZOID = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+SCHEMA_VERSION = "pcd-packet-6"
 
 Vector = NDArray[np.float64]
 Matrix = NDArray[np.float64]
@@ -42,6 +39,35 @@ Tensor3 = NDArray[np.float64]
 PredictiveMap = Callable[[Vector], Vector]
 LogitMap = Callable[[Vector], Vector]
 LogitJacobianMap = Callable[[Vector], Matrix]
+
+
+@dataclass(frozen=True)
+class PacketProvenance:
+    """Immutable provenance needed to interpret a serialized packet.
+
+    ``reproducible`` must be true before the default serializer accepts a
+    packet. Model-free and exploratory callers may carry an explicit untracked
+    record in memory, but must opt out deliberately when serializing it.
+    """
+
+    teacher_model_id: str = "untracked:model-free-callable"
+    teacher_revision: str = "untracked"
+    tokenizer_hash: str = "not-applicable"
+    outcome_map_hash: str = "untracked"
+    chart_id: str = "untracked"
+    chart_bounds: tuple[tuple[float, float], ...] = ()
+    context_id: str = "untracked"
+    inference_dtype: str = "float64"
+    reproducible: bool = False
+
+
+@dataclass(frozen=True)
+class TransportBoundAudit:
+    """A transport bound bundled with its evidentiary status and source."""
+
+    value: float
+    evidence_status: str
+    evidence_source: str
 
 
 @dataclass(frozen=True)
@@ -70,6 +96,18 @@ class ConnectionPacket:
     refinement_error: float
     accepted: bool
     rejection_reason: str
+    metric_floor: float = 1e-10
+    metric_relative_floor: float = 1e-12
+    refinement_rtol: float = 1e-3
+    refinement_atol: float = 1e-6
+    refinement_absolute_error: float = 0.0
+    refinement_tolerance_ratio: float = 0.0
+    jvp_consistency_relative_error: float | None = None
+    jvp_consistency_absolute_error: float | None = None
+    jvp_consistency_tolerance_ratio: float | None = None
+    jvp_rtol: float = 1e-5
+    jvp_atol: float = 0.0
+    provenance: PacketProvenance = field(default_factory=PacketProvenance)
     serialization_quantization_error: float = 0.0
     serialization_metric_eigenvalue_error_bound: float = 0.0
     schema_version: str = SCHEMA_VERSION
@@ -151,14 +189,23 @@ def _jet_tensors(
     h: float,
     score_logits_fn: LogitMap | None = None,
     score_logit_jacobian_fn: LogitJacobianMap | None = None,
-) -> tuple[Vector, Matrix, Tensor3, Tensor3, Tensor3]:
-    """Return ``(q, G, L, C_score, C_audit)`` at step ``h``.
+) -> tuple[
+    Vector,
+    Matrix,
+    Tensor3,
+    Tensor3,
+    Tensor3,
+    tuple[float, float] | None,
+]:
+    """Return ``(q, G, L, C_score, C_audit, jvp_audit)`` at step ``h``.
 
-    ``G`` and ``L`` come from central differences of ``psi = 2 sqrt(q)``.
-    ``C_score`` uses an exact logit Jacobian when supplied, otherwise central
-    differences of logits or, for the probability-only compatibility path,
-    central differences of ``log q``. Invalid or underflowed simplex values
-    are rejected rather than silently excluded.
+    ``G`` and ``L`` come from central differences of ``psi = 2 sqrt(q)``. When
+    an exact logit Jacobian is supplied, its exact square-root derivative is
+    used for ``G`` and the first-derivative leg of ``L``. ``C_score`` uses that
+    same Jacobian when supplied, otherwise central differences of logits or,
+    for the probability-only compatibility path, central differences of
+    ``log q``. Invalid or underflowed simplex values are rejected rather than
+    silently excluded.
     """
 
     m = z.shape[0]
@@ -197,13 +244,40 @@ def _jet_tensors(
     metric = np.einsum("ia,ja->ij", d_psi, d_psi)
     first_kind = np.einsum("ija,ka->ijk", d2_psi, d_psi)
 
+    jvp_audit: tuple[float, float] | None = None
     if score_logit_jacobian_fn is not None:
+        if score_logits_fn is None:
+            raise ValueError(
+                "an exact logit Jacobian requires score_logits_fn for an "
+                "independent finite-difference consistency audit"
+            )
         raw_source = np.asarray(score_logit_jacobian_fn(z))
         if raw_source.dtype != np.dtype(np.float64):
             raise TypeError("score_logit_jacobian_fn must return float64 values")
         raw = np.asarray(raw_source, dtype=np.float64)
         if raw.shape != (m, n) or not np.all(np.isfinite(raw)):
             raise ValueError("logit Jacobian must be a finite (chart_dim, outcomes) array")
+        logit_plus = np.empty((m, n))
+        logit_minus = np.empty((m, n))
+        for i in range(m):
+            unit = np.zeros(m)
+            unit[i] = h
+            logit_plus[i] = _evaluate_logits(score_logits_fn, z + unit, n)
+            logit_minus[i] = _evaluate_logits(score_logits_fn, z - unit, n)
+        finite_difference_raw = (logit_plus - logit_minus) / (2.0 * h)
+        # Compare modulo the rowwise softmax gauge. The declared Jacobian layout
+        # is (chart_dim, outcomes), so outcome centering is along axis 1.
+        centered_raw = raw - raw.mean(axis=1, keepdims=True)
+        centered_finite_difference = finite_difference_raw - finite_difference_raw.mean(
+            axis=1, keepdims=True
+        )
+        jvp_audit = (
+            float(np.linalg.norm(centered_raw - centered_finite_difference)),
+            max(
+                float(np.linalg.norm(centered_raw)),
+                float(np.linalg.norm(centered_finite_difference)),
+            ),
+        )
     elif score_logits_fn is not None:
         logit_plus = np.empty((m, n))
         logit_minus = np.empty((m, n))
@@ -218,6 +292,10 @@ def _jet_tensors(
 
     gauge = raw @ q0
     scores = raw - gauge[:, None]
+    if score_logit_jacobian_fn is not None:
+        d_psi = np.sqrt(q0)[None, :] * scores
+        metric = np.einsum("ia,ja->ij", d_psi, d_psi)
+        first_kind = np.einsum("ija,ka->ijk", d2_psi, d_psi)
     cubic = np.einsum("a,ia,ja,ka->ijk", q0, scores, scores, scores)
 
     d_q = (q_plus - q_minus) / (2.0 * h)
@@ -226,18 +304,192 @@ def _jet_tensors(
             "ia,ja,ka,a->ijk", d_q, d_q, d_q, 1.0 / np.square(q0)
         )
 
-    return q0, metric, first_kind, cubic, cubic_audit
+    return q0, metric, first_kind, cubic, cubic_audit, jvp_audit
 
 
-def _max_relative_difference(
+def _fisher_norm(tensor: Tensor3, metric: Matrix, inverse: Matrix) -> float:
+    """Fisher norm of a ``(1, 2)``-tensor ``T[l, i, j]`` at one chart point."""
+
+    squared = float(
+        np.einsum(
+            "lr,ia,jb,lij,rab->",
+            metric,
+            inverse,
+            inverse,
+            tensor,
+            tensor,
+        )
+    )
+    return math.sqrt(max(squared, 0.0))
+
+
+def _difference_diagnostics(
     first: Sequence[NDArray[np.float64]],
     second: Sequence[NDArray[np.float64]],
-) -> float:
-    worst = 0.0
-    for a, b in zip(first, second):
-        scale = max(1.0, float(np.linalg.norm(b)))
-        worst = max(worst, float(np.linalg.norm(a - b)) / scale)
-    return worst
+    *,
+    atol: float,
+    rtol: float,
+) -> tuple[float, float, float]:
+    """Return worst chart-invariant relative, absolute, and tolerance errors.
+
+    The two Richardson extrapolants are compared through quantities that are
+    invariant under a linear change of the intervention chart, rather than
+    through raw Frobenius norms of ``(G, L, C)``:
+
+    * the metric through the dimensionless relative defect
+      ``||G_2^{-1/2}(G_1-G_2)G_2^{-1/2}||_F``, whose own scale is
+      ``||I||_F = sqrt(m)``;
+    * ``L`` and ``C`` through their raised counterparts ``G^{-1}L`` and
+      ``G^{-1}C`` measured in the Fisher norm, each extrapolant raised by its
+      own metric exactly as :func:`alpha_connection` later raises it.
+
+    Two properties follow, and both are the point of the change.  First, the
+    verdict no longer depends on chart units: ``z -> sz`` rescales ``G, L, C``
+    by ``s^2, s^3, s^3`` and leaves every quantity above fixed.  Second, a
+    structurally zero ``L`` or ``C`` -- for example the first-kind coefficient
+    of the paper's boundary Bernoulli family, where ``<d_ij psi, d_k psi>``
+    vanishes identically -- has a well-defined zero Fisher scale, so its
+    roundoff-level difference is compared against ``atol`` rather than against
+    itself.  A pure relative criterion on the raw tensor would instead divide
+    roundoff by roundoff and report a spurious order-one failure.
+
+    ``atol`` is therefore dimensionless: it is the Fisher-norm magnitude below
+    which this numerical gate treats a connection or raised-cubic coefficient
+    as indistinguishable from zero.  It does not prove that the exact
+    coefficient vanishes.  The reported relative error is regularized by the
+    same constant, so it remains well defined at zero scale and stays monotone
+    with the acceptance ratio.  Non-invertible or non-finite metrics return
+    infinite diagnostics; the rank and conditioning gates report those cases
+    with their own reasons.
+    """
+
+    metric_coarse = 0.5 * (first[0] + first[0].T)
+    metric_fine = 0.5 * (second[0] + second[0].T)
+    dimension = metric_fine.shape[0]
+    if not (
+        np.all(np.isfinite(metric_coarse)) and np.all(np.isfinite(metric_fine))
+    ):
+        return math.inf, math.inf, math.inf
+    try:
+        eigenvalues, eigenvectors = np.linalg.eigh(metric_fine)
+        if not np.all(np.isfinite(eigenvalues)) or float(eigenvalues.min()) <= 0.0:
+            return math.inf, math.inf, math.inf
+        inverse_fine = eigenvectors @ np.diag(1.0 / eigenvalues) @ eigenvectors.T
+        inverse_sqrt = (
+            eigenvectors @ np.diag(1.0 / np.sqrt(eigenvalues)) @ eigenvectors.T
+        )
+        inverse_coarse = np.linalg.inv(metric_coarse)
+    except np.linalg.LinAlgError:
+        return math.inf, math.inf, math.inf
+
+    normalized_metric_defect = float(
+        np.linalg.norm(inverse_sqrt @ (metric_coarse - metric_fine) @ inverse_sqrt)
+    )
+    entries: list[tuple[float, float]] = [
+        (normalized_metric_defect, math.sqrt(dimension))
+    ]
+    for slot in (1, 2):
+        raised_coarse = np.einsum("lk,ijk->lij", inverse_coarse, first[slot])
+        raised_fine = np.einsum("lk,ijk->lij", inverse_fine, second[slot])
+        entries.append(
+            (
+                _fisher_norm(raised_coarse - raised_fine, metric_fine, inverse_fine),
+                max(
+                    _fisher_norm(raised_coarse, metric_fine, inverse_fine),
+                    _fisher_norm(raised_fine, metric_fine, inverse_fine),
+                ),
+            )
+        )
+
+    worst_relative = 0.0
+    worst_absolute = 0.0
+    worst_tolerance_ratio = 0.0
+    for difference, scale in entries:
+        if not (math.isfinite(difference) and math.isfinite(scale)):
+            return math.inf, math.inf, math.inf
+        # Regularize by ``atol`` so the reported error stays well posed, and
+        # monotone with the verdict, when the tensor's own scale is zero.
+        denominator = max(scale, atol)
+        relative = (
+            0.0
+            if difference == 0.0
+            else math.inf
+            if denominator == 0.0
+            else difference / denominator
+        )
+        tolerance = atol + rtol * scale
+        tolerance_ratio = (
+            0.0
+            if difference == 0.0
+            else math.inf
+            if tolerance == 0.0
+            else difference / tolerance
+        )
+        worst_relative = max(worst_relative, relative)
+        worst_absolute = max(worst_absolute, difference)
+        worst_tolerance_ratio = max(worst_tolerance_ratio, tolerance_ratio)
+    return worst_relative, worst_absolute, worst_tolerance_ratio
+
+
+def _maximum_diagnostics(
+    *diagnostics: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    """Combine independent refinement checks without hiding the worst one."""
+
+    return tuple(max(values) for values in zip(*diagnostics, strict=True))
+
+
+def _validate_stencil_bounds(
+    point: Vector,
+    step: float,
+    provenance: PacketProvenance,
+) -> None:
+    """Fail before evaluation when the full central stencil leaves the chart."""
+
+    bounds = provenance.chart_bounds
+    if not bounds:
+        return
+    if len(bounds) != point.size:
+        raise ValueError("chart bounds dimension does not match the packet chart")
+    for coordinate, raw_bounds in zip(point, bounds, strict=True):
+        if len(raw_bounds) != 2:
+            raise ValueError("each chart bound must contain lower and upper values")
+        lower, upper = (float(raw_bounds[0]), float(raw_bounds[1]))
+        if not math.isfinite(lower) or not math.isfinite(upper) or lower >= upper:
+            raise ValueError("chart bounds must be finite and strictly ordered")
+        if coordinate - step < lower or coordinate + step > upper:
+            raise ValueError(
+                "central-difference stencil extends outside declared chart bounds"
+            )
+
+
+def _gate_reason(
+    metric: Matrix,
+    *,
+    metric_floor: float,
+    metric_relative_floor: float,
+    refinement_tolerance_ratio: float,
+    jvp_consistency_tolerance_ratio: float | None,
+) -> tuple[str, Vector]:
+    """Recompute the ordered packet verdict from values carried by the packet."""
+
+    if not np.all(np.isfinite(metric)):
+        return "nonfinite", np.full(metric.shape[0], np.nan, dtype=np.float64)
+    eigenvalues = np.linalg.eigvalsh(0.5 * (metric + metric.T))
+    if (
+        jvp_consistency_tolerance_ratio is not None
+        and jvp_consistency_tolerance_ratio > 1.0
+    ):
+        return "jvp_consistency", eigenvalues
+    if float(eigenvalues.min()) <= 0.0:
+        return "rank", eigenvalues
+    if float(eigenvalues.min() / eigenvalues.max()) < metric_relative_floor:
+        return "conditioning", eigenvalues
+    if float(eigenvalues.min()) < metric_floor:
+        return "metric_scale", eigenvalues
+    if refinement_tolerance_ratio > 1.0:
+        return "refinement", eigenvalues
+    return "", eigenvalues
 
 
 def build_packet(
@@ -246,19 +498,36 @@ def build_packet(
     step: float,
     *,
     metric_floor: float = 1e-10,
+    metric_relative_floor: float = 1e-12,
     refinement_rtol: float = 1e-3,
+    refinement_atol: float = 1e-6,
+    jvp_rtol: float = 1e-5,
+    jvp_atol: float = 0.0,
     score_logits_fn: LogitMap | None = None,
     score_logit_jacobian_fn: LogitJacobianMap | None = None,
+    provenance: PacketProvenance | None = None,
 ) -> ConnectionPacket:
     """Assemble and gate a connection packet at one chart point.
 
-    Tensors are computed at steps ``(h, h/2, h/4)`` and combined by
-    Richardson extrapolation of the ``O(h^2)`` estimators; the packet is
-    accepted only when the two extrapolants agree to ``refinement_rtol`` in
-    relative norm (a formal acceptance rule, not a visually judged plateau),
-    all primary tensors are finite, and the metric clears ``metric_floor``.
-    Rejected packets retain their values and a ``rejection_reason`` so the
-    audit log can report acceptance coverage.
+    Tensors are computed on the nested ladder ``(h, h/2, h/4)`` and the
+    incommensurate ladder ``(h/sqrt(2), h/(2sqrt(2)), h/(4sqrt(2)))``. Each is
+    combined by Richardson extrapolation of the ``O(h^2)`` estimators; the
+    packet is accepted only when both ladders converge internally and their
+    fine extrapolants agree under the declared
+    ``refinement_atol + refinement_rtol * scale`` rule (not a visually judged
+    plateau). Both the difference and the scale are the chart-invariant
+    quantities of :func:`_difference_diagnostics`: the relative metric defect
+    and the Fisher norms of the raised ``G^{-1}L`` and ``G^{-1}C``. The
+    verdict is therefore unchanged by a linear change of chart units, and
+    ``refinement_atol`` is dimensionless -- it is the Fisher-norm magnitude
+    below which this numerical gate treats a coefficient as indistinguishable
+    from zero. This prevents an analytically vanishing ``L`` or ``C`` from
+    being compared with its own roundoff; it does not certify exact vanishing.
+    All primary tensors must be finite, the metric must
+    clear both the absolute chart-scale and relative-conditioning floors, and
+    any supplied exact JVP agrees with a gauge-centered finite-difference
+    audit. Rejected packets retain their values and a ``rejection_reason`` so
+    the audit log can report acceptance coverage.
     """
 
     point = _as_point(z)
@@ -267,8 +536,27 @@ def build_packet(
         raise ValueError("step must be finite and positive")
     if not math.isfinite(metric_floor) or metric_floor <= 0.0:
         raise ValueError("metric_floor must be finite and positive")
+    if (
+        not math.isfinite(metric_relative_floor)
+        or not 0.0 < metric_relative_floor <= 1.0
+    ):
+        raise ValueError("metric_relative_floor must lie in (0, 1]")
     if not math.isfinite(refinement_rtol) or refinement_rtol < 0.0:
         raise ValueError("refinement_rtol must be finite and nonnegative")
+    if not math.isfinite(refinement_atol) or refinement_atol < 0.0:
+        raise ValueError("refinement_atol must be finite and nonnegative")
+    if not math.isfinite(jvp_rtol) or jvp_rtol < 0.0:
+        raise ValueError("jvp_rtol must be finite and nonnegative")
+    if not math.isfinite(jvp_atol) or jvp_atol < 0.0:
+        raise ValueError("jvp_atol must be finite and nonnegative")
+    if score_logit_jacobian_fn is not None and score_logits_fn is None:
+        raise ValueError(
+            "score_logit_jacobian_fn requires score_logits_fn for consistency audit"
+        )
+    packet_provenance = provenance if provenance is not None else PacketProvenance()
+    if not isinstance(packet_provenance, PacketProvenance):
+        raise TypeError("provenance must be a PacketProvenance instance")
+    _validate_stencil_bounds(point, h, packet_provenance)
 
     levels = [
         _jet_tensors(
@@ -280,45 +568,109 @@ def build_packet(
         )
         for factor in (1.0, 2.0, 4.0)
     ]
+    incommensurate_levels = [
+        _jet_tensors(
+            q_fn,
+            point,
+            h / (math.sqrt(2.0) * factor),
+            score_logits_fn=score_logits_fn,
+            score_logit_jacobian_fn=score_logit_jacobian_fn,
+        )
+        for factor in (1.0, 2.0, 4.0)
+    ]
     q0 = levels[0][0]
 
-    def extrapolate(coarse_index: int, fine_index: int) -> list[Tensor3]:
-        coarse = levels[coarse_index]
-        fine = levels[fine_index]
+    def extrapolate(
+        source_levels: Sequence[tuple], coarse_index: int, fine_index: int
+    ) -> list[Tensor3]:
+        coarse = source_levels[coarse_index]
+        fine = source_levels[fine_index]
         return [
             (4.0 * fine[slot] - coarse[slot]) / 3.0
             for slot in (1, 2, 3)
         ]
 
-    first_ext = extrapolate(0, 1)
-    second_ext = extrapolate(1, 2)
-    refinement_error = _max_relative_difference(first_ext, second_ext)
+    first_ext = extrapolate(levels, 0, 1)
+    second_ext = extrapolate(levels, 1, 2)
+    incommensurate_first_ext = extrapolate(incommensurate_levels, 0, 1)
+    incommensurate_second_ext = extrapolate(incommensurate_levels, 1, 2)
+    refinement_diagnostics = _maximum_diagnostics(
+        _difference_diagnostics(
+            first_ext,
+            second_ext,
+            atol=refinement_atol,
+            rtol=refinement_rtol,
+        ),
+        _difference_diagnostics(
+            incommensurate_first_ext,
+            incommensurate_second_ext,
+            atol=refinement_atol,
+            rtol=refinement_rtol,
+        ),
+        _difference_diagnostics(
+            second_ext,
+            incommensurate_second_ext,
+            atol=refinement_atol,
+            rtol=refinement_rtol,
+        ),
+    )
+    (
+        refinement_error,
+        refinement_absolute_error,
+        refinement_tolerance_ratio,
+    ) = refinement_diagnostics
 
     metric = 0.5 * (second_ext[0] + second_ext[0].T)
     first_kind = second_ext[1]
     cubic = second_ext[2]
     cubic_audit = levels[2][4]
+    finest_jvp_audits = (levels[2][5], incommensurate_levels[2][5])
+    if all(audit is None for audit in finest_jvp_audits):
+        jvp_consistency_relative_error = None
+        jvp_consistency_absolute_error = None
+        jvp_consistency_tolerance_ratio = None
+    else:
+        if any(audit is None for audit in finest_jvp_audits):
+            raise RuntimeError("inconsistent exact-JVP audit construction")
+        relative_errors = []
+        absolute_errors = []
+        tolerance_ratios = []
+        for audit in finest_jvp_audits:
+            assert audit is not None
+            jvp_difference, jvp_scale = audit
+            relative_errors.append(
+                0.0
+                if jvp_difference == 0.0
+                else math.inf
+                if jvp_scale == 0.0
+                else jvp_difference / jvp_scale
+            )
+            absolute_errors.append(jvp_difference)
+            jvp_tolerance = jvp_atol + jvp_rtol * jvp_scale
+            tolerance_ratios.append(
+                0.0
+                if jvp_difference == 0.0
+                else math.inf
+                if jvp_tolerance == 0.0
+                else jvp_difference / jvp_tolerance
+            )
+        jvp_consistency_relative_error = max(relative_errors)
+        jvp_consistency_absolute_error = max(absolute_errors)
+        jvp_consistency_tolerance_ratio = max(tolerance_ratios)
 
     primary_finite = all(
         np.all(np.isfinite(block)) for block in (metric, first_kind, cubic)
     )
-    eigenvalues = (
-        np.linalg.eigvalsh(metric)
-        if primary_finite
-        else np.full(point.size, np.nan, dtype=np.float64)
+    reason, eigenvalues = _gate_reason(
+        metric,
+        metric_floor=metric_floor,
+        metric_relative_floor=metric_relative_floor,
+        refinement_tolerance_ratio=refinement_tolerance_ratio,
+        jvp_consistency_tolerance_ratio=jvp_consistency_tolerance_ratio,
     )
-
-    accepted = True
-    reason = ""
     if not primary_finite:
-        accepted = False
         reason = "nonfinite"
-    elif float(eigenvalues.min()) < metric_floor:
-        accepted = False
-        reason = "rank"
-    elif refinement_error > refinement_rtol:
-        accepted = False
-        reason = "refinement"
+    accepted = reason == ""
 
     return ConnectionPacket(
         z=point,
@@ -332,6 +684,18 @@ def build_packet(
         refinement_error=refinement_error,
         accepted=accepted,
         rejection_reason=reason,
+        metric_floor=metric_floor,
+        metric_relative_floor=metric_relative_floor,
+        refinement_rtol=refinement_rtol,
+        refinement_atol=refinement_atol,
+        refinement_absolute_error=refinement_absolute_error,
+        refinement_tolerance_ratio=refinement_tolerance_ratio,
+        jvp_consistency_relative_error=jvp_consistency_relative_error,
+        jvp_consistency_absolute_error=jvp_consistency_absolute_error,
+        jvp_consistency_tolerance_ratio=jvp_consistency_tolerance_ratio,
+        jvp_rtol=jvp_rtol,
+        jvp_atol=jvp_atol,
+        provenance=packet_provenance,
     )
 
 
@@ -342,7 +706,12 @@ def build_packet_from_logits(
     *,
     logit_jacobian_fn: LogitJacobianMap | None = None,
     metric_floor: float = 1e-10,
+    metric_relative_floor: float = 1e-12,
     refinement_rtol: float = 1e-3,
+    refinement_atol: float = 1e-6,
+    jvp_rtol: float = 1e-5,
+    jvp_atol: float = 0.0,
+    provenance: PacketProvenance | None = None,
 ) -> ConnectionPacket:
     """Build a packet from float64 logits, with optional exact logit JVPs.
 
@@ -360,9 +729,14 @@ def build_packet_from_logits(
         z,
         step,
         metric_floor=metric_floor,
+        metric_relative_floor=metric_relative_floor,
         refinement_rtol=refinement_rtol,
+        refinement_atol=refinement_atol,
+        jvp_rtol=jvp_rtol,
+        jvp_atol=jvp_atol,
         score_logits_fn=logits_fn,
         score_logit_jacobian_fn=logit_jacobian_fn,
+        provenance=provenance,
     )
 
 
@@ -443,12 +817,17 @@ def packet_transport_bound(
     holder_student: float,
     fill_distance: float,
     holder_exponent: float = 1.0,
-) -> float:
+    *,
+    evidence_status: str,
+    evidence_source: str,
+) -> TransportBoundAudit:
     """Section 11.3 proven packet-to-transport bound.
 
     ``L_gamma * exp((M_T + M_S) L_gamma) * (delta_pack + (H_T + H_S) h^rho)``
-    with continuum constants supplied by a certificate, or clearly labeled
-    empirical grid estimates when no such certificate is available.
+    The result cannot be constructed without declaring whether the continuum
+    constants are ``certified`` or ``sampled`` and giving a nonempty source.
+    This prevents an empirical grid modulus from being serialized or reported
+    as a mathematical certificate by omission.
     """
 
     nonnegative = (
@@ -464,10 +843,23 @@ def packet_transport_bound(
         raise ValueError("transport-bound inputs must be finite and nonnegative")
     if not math.isfinite(holder_exponent) or not 0.0 < holder_exponent <= 1.0:
         raise ValueError("holder_exponent must lie in (0, 1]")
+    if evidence_status not in {"certified", "sampled"}:
+        raise ValueError("evidence_status must be 'certified' or 'sampled'")
+    if not isinstance(evidence_source, str) or not evidence_source.strip():
+        raise ValueError("evidence_source must be a nonempty string")
 
     interpolation = (holder_teacher + holder_student) * fill_distance**holder_exponent
-    growth = math.exp((sup_teacher + sup_student) * path_length)
-    return path_length * growth * (packet_defect + interpolation)
+    try:
+        growth = math.exp((sup_teacher + sup_student) * path_length)
+    except OverflowError:
+        value = math.inf
+    else:
+        value = path_length * growth * (packet_defect + interpolation)
+    return TransportBoundAudit(
+        value=value,
+        evidence_status=evidence_status,
+        evidence_source=evidence_source.strip(),
+    )
 
 
 def metric_relative_loss(student_metric: Matrix, teacher_metric: Matrix) -> float:
@@ -521,10 +913,20 @@ def raised_cubic_loss(student: ConnectionPacket, teacher: ConnectionPacket) -> f
 def centered_logit_jacobian_loss(
     student_jacobian: Matrix, teacher_jacobian: Matrix
 ) -> float:
-    """Squared defect of outcome-centered logit Jacobians (Section 4.2)."""
+    """Squared defect for ``(chart_dim, outcomes)`` logit Jacobians."""
 
-    student_centered = student_jacobian - student_jacobian.mean(axis=0, keepdims=True)
-    teacher_centered = teacher_jacobian - teacher_jacobian.mean(axis=0, keepdims=True)
+    student = np.asarray(student_jacobian, dtype=np.float64)
+    teacher = np.asarray(teacher_jacobian, dtype=np.float64)
+    if student.ndim != 2 or teacher.ndim != 2 or student.shape != teacher.shape:
+        raise ValueError(
+            "student and teacher Jacobians must share (chart_dim, outcomes) shape"
+        )
+    if student.shape[1] < 2:
+        raise ValueError("a logit Jacobian requires at least two outcomes")
+    if not np.all(np.isfinite(student)) or not np.all(np.isfinite(teacher)):
+        raise ValueError("logit Jacobians must be finite")
+    student_centered = student - student.mean(axis=1, keepdims=True)
+    teacher_centered = teacher - teacher.mean(axis=1, keepdims=True)
     difference = student_centered - teacher_centered
     return float(np.sum(difference * difference))
 
@@ -540,23 +942,68 @@ def sobolev_grid_audit(values: Matrix, spacing: float, order: int) -> float:
     """Finite-difference squared ``H^order`` estimate on a uniform 1-D grid.
 
     ``values[t, a]`` samples a curve in ``ell_2`` at grid points with the
-    given spacing.  Derivatives are forward differences, integrals are
-    trapezoidal on the surviving points.  This is a numerical audit of a
-    surrogate, not a certificate for the underlying map (Section 11.4).
+    given spacing. Derivatives use second-order edge-aware gradients on the
+    full grid and integrals use composite Simpson rules (with a 3/8 tail when
+    needed). This is a numerical audit of a surrogate, not a certificate for
+    the underlying map (Section 11.4).
     """
 
-    if values.ndim != 2:
+    value_array = np.asarray(values, dtype=np.float64)
+    if value_array.ndim != 2:
         raise ValueError("values must be a (grid, outcomes) array")
-    if order < 0:
-        raise ValueError("order must be nonnegative")
+    if not np.all(np.isfinite(value_array)):
+        raise ValueError("values must be finite")
+    if not math.isfinite(spacing) or spacing <= 0.0:
+        raise ValueError("spacing must be finite and positive")
+    if isinstance(order, bool) or int(order) != order or order < 0:
+        raise ValueError("order must be a nonnegative integer")
+    order = int(order)
+    minimum_points = 2 if order == 0 else max(3, order + 2)
+    if value_array.shape[0] < minimum_points:
+        raise ValueError(
+            f"order {order} requires at least {minimum_points} grid points"
+        )
+
+    def integrate_uniform(samples: Vector) -> float:
+        count = samples.size
+        if count == 2:
+            return 0.5 * spacing * float(samples[0] + samples[1])
+
+        def simpson_one_third(block: Vector) -> float:
+            return (spacing / 3.0) * float(
+                block[0]
+                + block[-1]
+                + 4.0 * np.sum(block[1:-1:2])
+                + 2.0 * np.sum(block[2:-1:2])
+            )
+
+        if count % 2 == 1:
+            return simpson_one_third(samples)
+        if count == 4:
+            return (3.0 * spacing / 8.0) * float(
+                samples[0] + 3.0 * samples[1] + 3.0 * samples[2] + samples[3]
+            )
+        prefix = simpson_one_third(samples[:-3])
+        tail = (3.0 * spacing / 8.0) * float(
+            samples[-4]
+            + 3.0 * samples[-3]
+            + 3.0 * samples[-2]
+            + samples[-1]
+        )
+        return prefix + tail
+
     total = 0.0
-    current = np.asarray(values, dtype=np.float64)
-    for _ in range(order + 1):
+    current = value_array
+    for derivative_order in range(order + 1):
         squared = np.sum(current * current, axis=1)
-        total += float(_TRAPEZOID(squared, dx=spacing))
-        if current.shape[0] < 2:
-            break
-        current = np.diff(current, axis=0) / spacing
+        total += integrate_uniform(squared)
+        if derivative_order < order:
+            current = np.gradient(
+                current,
+                spacing,
+                axis=0,
+                edge_order=2,
+            )
     return total
 
 
@@ -565,33 +1012,80 @@ def sufficiency_decomposition(
     effects: Matrix,
     transferred: Matrix,
     metric: Matrix,
+    *,
+    estimand: str,
 ) -> tuple[float, float, float]:
-    """Exact conditional-variance split of Section 9.4 on discrete fibers.
+    """Conditional-variance split of Section 9.4 on sampled discrete fibers.
 
-    Returns ``(insufficiency, mismatch, total)`` where ``total`` equals
-    their sum exactly whenever ``transferred`` is constant on each fiber and
-    the metric is fiber-independent.
+    ``estimand='empirical'`` returns the exact decomposition of the empirical
+    distribution. ``estimand='population_unbiased'`` applies the finite-fiber
+    ANOVA correction under IID sampling within each fiber; the corrected
+    mismatch component can be negative in a finite sample even though its
+    population target is nonnegative. In both modes the components sum to the
+    direct empirical total exactly.
     """
 
     labels = np.asarray(fiber_ids)
     effect_array = np.asarray(effects, dtype=np.float64)
     transfer_array = np.asarray(transferred, dtype=np.float64)
+    metric_array = np.asarray(metric, dtype=np.float64)
+    if labels.ndim != 1 or labels.size == 0:
+        raise ValueError("fiber_ids must be a nonempty one-dimensional sequence")
+    if effect_array.ndim != 2 or transfer_array.shape != effect_array.shape:
+        raise ValueError("effects and transferred must share a two-dimensional shape")
+    if effect_array.shape[0] != labels.size:
+        raise ValueError("fiber_ids length must equal the number of effect rows")
+    dimension = effect_array.shape[1]
+    if metric_array.shape != (dimension, dimension):
+        raise ValueError("metric shape must match the effect dimension")
+    if not all(
+        np.all(np.isfinite(block))
+        for block in (effect_array, transfer_array, metric_array)
+    ):
+        raise ValueError("effects, transferred values, and metric must be finite")
+    if not np.allclose(metric_array, metric_array.T, rtol=0.0, atol=1e-12):
+        raise ValueError("metric must be symmetric")
+    if float(np.linalg.eigvalsh(metric_array).min()) <= 0.0:
+        raise ValueError("metric must be positive definite")
+    if estimand not in {"empirical", "population_unbiased"}:
+        raise ValueError("estimand must be 'empirical' or 'population_unbiased'")
     for fiber in np.unique(labels):
         block = transfer_array[labels == fiber]
         if not np.allclose(block, block[0]):
             raise ValueError("transferred field must be constant on each fiber")
 
     def norm_sq(rows: Matrix) -> Vector:
-        return np.einsum("nd,de,ne->n", rows, metric, rows)
+        return np.einsum("nd,de,ne->n", rows, metric_array, rows)
 
     conditional_mean = np.empty_like(effect_array)
     for fiber in np.unique(labels):
         mask = labels == fiber
         conditional_mean[mask] = effect_array[mask].mean(axis=0)
 
-    insufficiency = float(np.mean(norm_sq(effect_array - conditional_mean)))
-    mismatch = float(np.mean(norm_sq(conditional_mean - transfer_array)))
     total = float(np.mean(norm_sq(effect_array - transfer_array)))
+    if estimand == "empirical":
+        insufficiency = float(np.mean(norm_sq(effect_array - conditional_mean)))
+        mismatch = float(np.mean(norm_sq(conditional_mean - transfer_array)))
+        return insufficiency, mismatch, total
+
+    insufficiency = 0.0
+    mismatch = 0.0
+    sample_count = labels.size
+    for fiber in np.unique(labels):
+        mask = labels == fiber
+        fiber_count = int(np.count_nonzero(mask))
+        if fiber_count < 2:
+            raise ValueError(
+                "population_unbiased estimand requires at least two rows per fiber"
+            )
+        residuals = effect_array[mask] - conditional_mean[mask]
+        sample_variance = float(np.sum(norm_sq(residuals)) / (fiber_count - 1))
+        weight = fiber_count / sample_count
+        fiber_mismatch = float(
+            norm_sq((conditional_mean[mask][0] - transfer_array[mask][0])[None, :])[0]
+        )
+        insufficiency += weight * sample_variance
+        mismatch += weight * (fiber_mismatch - sample_variance / fiber_count)
     return insufficiency, mismatch, total
 
 
@@ -706,12 +1200,100 @@ _PACKET_BODY_FIELDS = frozenset(
         "cubic_audit_finite",
         "metric_eigenvalues",
         "refinement_error",
+        "metric_floor",
+        "metric_relative_floor",
+        "refinement_rtol",
+        "refinement_atol",
+        "refinement_absolute_error",
+        "refinement_tolerance_ratio",
+        "jvp_consistency_checked",
+        "jvp_consistency_relative_error",
+        "jvp_consistency_absolute_error",
+        "jvp_consistency_tolerance_ratio",
+        "jvp_rtol",
+        "jvp_atol",
+        "provenance",
         "accepted",
         "rejection_reason",
         "serialization_quantization_error",
         "serialization_metric_eigenvalue_error_bound",
     }
 )
+
+_PROVENANCE_FIELDS = frozenset(
+    {
+        "teacher_model_id",
+        "teacher_revision",
+        "tokenizer_hash",
+        "outcome_map_hash",
+        "chart_id",
+        "chart_bounds",
+        "context_id",
+        "inference_dtype",
+        "reproducible",
+    }
+)
+
+
+def _provenance_to_dict(provenance: PacketProvenance) -> dict:
+    return {
+        "teacher_model_id": provenance.teacher_model_id,
+        "teacher_revision": provenance.teacher_revision,
+        "tokenizer_hash": provenance.tokenizer_hash,
+        "outcome_map_hash": provenance.outcome_map_hash,
+        "chart_id": provenance.chart_id,
+        "chart_bounds": [list(bounds) for bounds in provenance.chart_bounds],
+        "context_id": provenance.context_id,
+        "inference_dtype": provenance.inference_dtype,
+        "reproducible": provenance.reproducible,
+    }
+
+
+def _provenance_from_dict(data: object, chart_dimension: int) -> PacketProvenance:
+    if not isinstance(data, dict) or set(data) != _PROVENANCE_FIELDS:
+        raise ValueError("packet provenance fields do not match the declared schema")
+    string_fields = (
+        "teacher_model_id",
+        "teacher_revision",
+        "tokenizer_hash",
+        "outcome_map_hash",
+        "chart_id",
+        "context_id",
+        "inference_dtype",
+    )
+    if any(not isinstance(data[key], str) or not data[key] for key in string_fields):
+        raise ValueError("packet provenance string fields must be nonempty")
+    if not isinstance(data["reproducible"], bool):
+        raise ValueError("packet provenance reproducible flag must be boolean")
+    raw_bounds = data["chart_bounds"]
+    if not isinstance(raw_bounds, list):
+        raise ValueError("packet chart_bounds must be a list")
+    bounds: list[tuple[float, float]] = []
+    for raw_pair in raw_bounds:
+        if not isinstance(raw_pair, list) or len(raw_pair) != 2:
+            raise ValueError("each chart bound must be a [lower, upper] pair")
+        lower, upper = (float(raw_pair[0]), float(raw_pair[1]))
+        if not math.isfinite(lower) or not math.isfinite(upper) or lower >= upper:
+            raise ValueError("chart bounds must be finite and strictly ordered")
+        bounds.append((lower, upper))
+    if bounds and len(bounds) != chart_dimension:
+        raise ValueError("chart bounds dimension does not match the packet chart")
+    if data["reproducible"]:
+        if len(bounds) != chart_dimension:
+            raise ValueError("reproducible provenance requires complete chart bounds")
+        if any("untracked" in data[key].lower() for key in string_fields):
+            raise ValueError("reproducible provenance cannot contain untracked fields")
+    return PacketProvenance(
+        teacher_model_id=data["teacher_model_id"],
+        teacher_revision=data["teacher_revision"],
+        tokenizer_hash=data["tokenizer_hash"],
+        outcome_map_hash=data["outcome_map_hash"],
+        chart_id=data["chart_id"],
+        chart_bounds=tuple(bounds),
+        context_id=data["context_id"],
+        inference_dtype=data["inference_dtype"],
+        reproducible=data["reproducible"],
+    )
 
 
 def _packet_checksum(body: dict) -> str:
@@ -726,7 +1308,7 @@ def _packet_checksum(body: dict) -> str:
     if set(body) != _PACKET_BODY_FIELDS:
         raise ValueError("packet body fields do not match the declared schema")
     digest = hashlib.blake2b(digest_size=16, person=b"pcdpack")
-    digest.update(b"pcd-packet-3-binary-v1\x00")
+    digest.update(b"pcd-packet-6-binary-v1\x00")
 
     def add_bytes(label: str, payload: bytes) -> None:
         encoded_label = label.encode("utf-8")
@@ -772,6 +1354,56 @@ def _packet_checksum(body: dict) -> str:
         raise ValueError("non-finite cubic audit must use a null payload")
     add_array("metric_eigenvalues", "<f8")
     add_float("refinement_error")
+    add_float("metric_floor")
+    add_float("metric_relative_floor")
+    add_float("refinement_rtol")
+    add_float("refinement_atol")
+    add_float("refinement_absolute_error")
+    add_float("refinement_tolerance_ratio")
+    add_bool("jvp_consistency_checked")
+    if body["jvp_consistency_checked"]:
+        add_float("jvp_consistency_relative_error")
+        add_float("jvp_consistency_absolute_error")
+        add_float("jvp_consistency_tolerance_ratio")
+    elif any(
+        body[key] is not None
+        for key in (
+            "jvp_consistency_relative_error",
+            "jvp_consistency_absolute_error",
+            "jvp_consistency_tolerance_ratio",
+        )
+    ):
+        raise ValueError("unchecked JVP diagnostics must use null payloads")
+    add_float("jvp_rtol")
+    add_float("jvp_atol")
+    provenance = body["provenance"]
+    if not isinstance(provenance, dict) or set(provenance) != _PROVENANCE_FIELDS:
+        raise ValueError("packet provenance fields do not match the declared schema")
+    for label in (
+        "teacher_model_id",
+        "teacher_revision",
+        "tokenizer_hash",
+        "outcome_map_hash",
+        "chart_id",
+        "context_id",
+        "inference_dtype",
+    ):
+        value = provenance[label]
+        if not isinstance(value, str):
+            raise ValueError(f"packet provenance field {label!r} must be a string")
+        add_bytes(f"provenance:{label}", value.encode("utf-8"))
+    add_bytes(
+        "provenance:chart_bounds",
+        np.ascontiguousarray(
+            np.asarray(provenance["chart_bounds"], dtype=np.dtype("<f8"))
+        ).tobytes(order="C"),
+    )
+    if not isinstance(provenance["reproducible"], bool):
+        raise ValueError("packet provenance reproducible flag must be boolean")
+    add_bytes(
+        "provenance:reproducible",
+        struct.pack("<B", int(provenance["reproducible"])),
+    )
     add_bool("accepted")
     add_string("rejection_reason")
     add_float("serialization_quantization_error")
@@ -779,10 +1411,160 @@ def _packet_checksum(body: dict) -> str:
     return digest.hexdigest()
 
 
+def _validate_packet_semantics(
+    packet: ConnectionPacket,
+    *,
+    require_reproducible_provenance: bool,
+) -> None:
+    """Validate shapes, gate metadata, and acceptance as semantic invariants."""
+
+    z = np.asarray(packet.z)
+    q = np.asarray(packet.q)
+    metric = np.asarray(packet.metric)
+    first_kind = np.asarray(packet.first_kind)
+    cubic = np.asarray(packet.cubic)
+    if z.ndim != 1 or z.size == 0 or q.ndim != 1 or q.size == 0:
+        raise ValueError("invalid packet point or probability shape")
+    dimension = z.size
+    if metric.shape != (dimension, dimension) or any(
+        block.shape != (dimension, dimension, dimension)
+        for block in (first_kind, cubic)
+    ):
+        raise ValueError("packet geometric tensor shapes are inconsistent")
+    if not np.allclose(metric, metric.T, rtol=1e-7, atol=1e-12):
+        raise ValueError("packet metric must be symmetric")
+    if not np.allclose(first_kind, first_kind.swapaxes(0, 1), rtol=1e-6, atol=1e-10):
+        raise ValueError("packet first-kind tensor must be symmetric in derivative indices")
+    cubic_permutations = (
+        cubic.swapaxes(0, 1),
+        cubic.swapaxes(0, 2),
+        cubic.swapaxes(1, 2),
+    )
+    if any(
+        not np.allclose(cubic, permutation, rtol=1e-6, atol=1e-10)
+        for permutation in cubic_permutations
+    ):
+        raise ValueError("packet cubic tensor must be fully symmetric")
+    if np.any(q <= 0.0) or not np.isclose(float(q.sum()), 1.0, rtol=1e-10, atol=1e-12):
+        raise ValueError("packet probabilities must lie in the open simplex")
+
+    scalars = (
+        packet.step,
+        packet.refinement_error,
+        packet.metric_floor,
+        packet.metric_relative_floor,
+        packet.refinement_rtol,
+        packet.refinement_atol,
+        packet.refinement_absolute_error,
+        packet.refinement_tolerance_ratio,
+        packet.jvp_rtol,
+        packet.jvp_atol,
+    )
+    if not all(math.isfinite(float(value)) for value in scalars):
+        raise ValueError("packet gate metadata must be finite")
+    if packet.step <= 0.0 or packet.metric_floor <= 0.0:
+        raise ValueError("packet step and absolute metric floor must be positive")
+    if not 0.0 < packet.metric_relative_floor <= 1.0:
+        raise ValueError("packet relative metric floor must lie in (0, 1]")
+    if any(
+        value < 0.0
+        for value in (
+            packet.refinement_error,
+            packet.refinement_rtol,
+            packet.refinement_atol,
+            packet.refinement_absolute_error,
+            packet.refinement_tolerance_ratio,
+            packet.jvp_rtol,
+            packet.jvp_atol,
+        )
+    ):
+        raise ValueError("packet errors and tolerances must be nonnegative")
+
+    jvp_values = (
+        packet.jvp_consistency_relative_error,
+        packet.jvp_consistency_absolute_error,
+        packet.jvp_consistency_tolerance_ratio,
+    )
+    jvp_checked = all(value is not None for value in jvp_values)
+    if any(value is not None for value in jvp_values) and not jvp_checked:
+        raise ValueError("JVP consistency diagnostics must be all present or all absent")
+    if jvp_checked and any(
+        not math.isfinite(float(value)) or float(value) < 0.0 for value in jvp_values
+    ):
+        raise ValueError("JVP consistency diagnostics must be finite and nonnegative")
+
+    provenance = _provenance_from_dict(
+        _provenance_to_dict(packet.provenance),
+        dimension,
+    )
+    if require_reproducible_provenance and not provenance.reproducible:
+        raise ValueError("serialization requires reproducible packet provenance")
+    if provenance.chart_bounds and any(
+        not lower <= coordinate <= upper
+        for coordinate, (lower, upper) in zip(packet.z, provenance.chart_bounds)
+    ):
+        raise ValueError("packet chart point lies outside its provenance bounds")
+
+    allowed_reasons = {
+        "nonfinite",
+        "rank",
+        "conditioning",
+        "metric_scale",
+        "refinement",
+        "jvp_consistency",
+    }
+    if packet.accepted and packet.rejection_reason:
+        raise ValueError("an accepted packet cannot have a rejection reason")
+    if not packet.accepted and packet.rejection_reason not in allowed_reasons:
+        raise ValueError("a rejected packet must retain a recognized rejection reason")
+
+    stored_eigenvalues = np.asarray(packet.metric_eigenvalues, dtype=np.float64)
+    if stored_eigenvalues.shape != (dimension,) or not np.all(
+        np.isfinite(stored_eigenvalues)
+    ):
+        raise ValueError("packet metric eigenvalues are invalid")
+    expected_reason, recomputed_eigenvalues = _gate_reason(
+        metric,
+        metric_floor=packet.metric_floor,
+        metric_relative_floor=packet.metric_relative_floor,
+        refinement_tolerance_ratio=packet.refinement_tolerance_ratio,
+        jvp_consistency_tolerance_ratio=(
+            float(packet.jvp_consistency_tolerance_ratio) if jvp_checked else None
+        ),
+    )
+    eigenvalue_scale = max(1.0, float(np.linalg.norm(metric, 2)))
+    eigenvalue_slack = 32.0 * np.finfo(np.float64).eps * eigenvalue_scale
+    if not np.allclose(
+        stored_eigenvalues,
+        recomputed_eigenvalues,
+        rtol=0.0,
+        atol=eigenvalue_slack,
+    ):
+        raise ValueError("packet metric eigenvalues disagree with the metric")
+
+    if packet.accepted and expected_reason:
+        accepted_errors = {
+            "nonfinite": "accepted packet contains a non-finite metric",
+            "jvp_consistency": "accepted packet violates its JVP consistency gate",
+            "rank": "accepted packet metric must be positive definite",
+            "conditioning": "accepted packet violates its relative conditioning gate",
+            "metric_scale": "accepted packet violates its absolute metric-scale gate",
+            "refinement": "accepted packet violates its refinement gate",
+        }
+        raise ValueError(accepted_errors[expected_reason])
+    if not packet.accepted and packet.rejection_reason != expected_reason:
+        expected_label = expected_reason or "accepted"
+        raise ValueError(
+            "packet rejection reason does not match the recomputed gate: "
+            f"stored {packet.rejection_reason!r}, expected {expected_label!r}"
+        )
+
+
 def packet_to_dict(
     packet: ConnectionPacket,
     *,
     max_quantization_error: float = 1e-6,
+    require_reproducible_provenance: bool = True,
 ) -> dict:
     """Serialize float32 geometry, a float64 output anchor, and all-field checksum.
 
@@ -793,6 +1575,10 @@ def packet_to_dict(
 
     if packet.schema_version != SCHEMA_VERSION:
         raise ValueError("packet schema version does not match this writer")
+    _validate_packet_semantics(
+        packet,
+        require_reproducible_provenance=require_reproducible_provenance,
+    )
     if not math.isfinite(max_quantization_error) or max_quantization_error < 0.0:
         raise ValueError("max_quantization_error must be finite and nonnegative")
     primary_finite = all(
@@ -815,18 +1601,24 @@ def packet_to_dict(
     if measured_quantization_error > max_quantization_error:
         raise ValueError("float32 packet quantization exceeds the declared tolerance")
     payload = _payload_arrays(packet)
-    original_eigenvalues = np.linalg.eigvalsh(packet.metric)
-    eigenvalue_scale = max(1.0, float(np.linalg.norm(packet.metric, 2)))
-    eigenvalue_numeric_slack = 32.0 * np.finfo(np.float64).eps * eigenvalue_scale
-    if not np.allclose(
-        packet.metric_eigenvalues,
-        original_eigenvalues,
-        rtol=0.0,
-        atol=eigenvalue_numeric_slack,
-    ):
-        raise ValueError("packet metric eigenvalues disagree with the metric")
+    serialized_metric = payload[2].astype(np.float64)
+    serialized_reason, serialized_eigenvalues = _gate_reason(
+        serialized_metric,
+        metric_floor=packet.metric_floor,
+        metric_relative_floor=packet.metric_relative_floor,
+        refinement_tolerance_ratio=packet.refinement_tolerance_ratio,
+        jvp_consistency_tolerance_ratio=packet.jvp_consistency_tolerance_ratio,
+    )
+    source_reason = "" if packet.accepted else packet.rejection_reason
+    if serialized_reason != source_reason:
+        serialized_label = serialized_reason or "accepted"
+        source_label = source_reason or "accepted"
+        raise ValueError(
+            "float32 serialization changes the packet gate from "
+            f"{source_label!r} to {serialized_label!r}"
+        )
     metric_eigenvalue_error_bound = float(
-        np.linalg.norm(packet.metric - payload[2].astype(np.float64), 2)
+        np.linalg.norm(packet.metric - serialized_metric, 2)
     )
     cubic_audit_finite = bool(np.all(np.isfinite(payload[5])))
     body = {
@@ -839,8 +1631,21 @@ def packet_to_dict(
         "cubic": payload[4].tolist(),
         "cubic_audit": payload[5].tolist() if cubic_audit_finite else None,
         "cubic_audit_finite": cubic_audit_finite,
-        "metric_eigenvalues": packet.metric_eigenvalues.tolist(),
+        "metric_eigenvalues": serialized_eigenvalues.tolist(),
         "refinement_error": packet.refinement_error,
+        "metric_floor": packet.metric_floor,
+        "metric_relative_floor": packet.metric_relative_floor,
+        "refinement_rtol": packet.refinement_rtol,
+        "refinement_atol": packet.refinement_atol,
+        "refinement_absolute_error": packet.refinement_absolute_error,
+        "refinement_tolerance_ratio": packet.refinement_tolerance_ratio,
+        "jvp_consistency_checked": packet.jvp_consistency_relative_error is not None,
+        "jvp_consistency_relative_error": packet.jvp_consistency_relative_error,
+        "jvp_consistency_absolute_error": packet.jvp_consistency_absolute_error,
+        "jvp_consistency_tolerance_ratio": packet.jvp_consistency_tolerance_ratio,
+        "jvp_rtol": packet.jvp_rtol,
+        "jvp_atol": packet.jvp_atol,
+        "provenance": _provenance_to_dict(packet.provenance),
         "accepted": packet.accepted,
         "rejection_reason": packet.rejection_reason,
         "serialization_quantization_error": measured_quantization_error,
@@ -849,7 +1654,11 @@ def packet_to_dict(
     return {**body, "checksum": _packet_checksum(body)}
 
 
-def packet_from_dict(data: dict) -> ConnectionPacket:
+def packet_from_dict(
+    data: dict,
+    *,
+    require_reproducible_provenance: bool = True,
+) -> ConnectionPacket:
     """Deserialize, validating the checksum, shapes, and packet invariants."""
 
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -886,27 +1695,46 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
     if not isinstance(data["accepted"], bool):
         raise ValueError("serialized accepted flag must be boolean")
     accepted = data["accepted"]
-    rejection_reason = str(data["rejection_reason"])
+    if not isinstance(data["rejection_reason"], str):
+        raise ValueError("serialized rejection reason must be a string")
+    rejection_reason = data["rejection_reason"]
     primary_finite = all(
         np.all(np.isfinite(block)) for block in (z, q, metric, first_kind, cubic)
     )
-    if accepted and not primary_finite:
-        raise ValueError("an accepted packet must have finite primary values")
-    if not primary_finite and rejection_reason != "nonfinite":
-        raise ValueError("nonfinite packet values require the nonfinite rejection reason")
-    if np.any(q <= 0.0) or not np.isclose(float(q.sum()), 1.0, rtol=1e-6, atol=1e-7):
+    if not primary_finite:
+        raise ValueError("strict-JSON packet primary values must be finite")
+    if np.any(q <= 0.0) or not np.isclose(float(q.sum()), 1.0, rtol=1e-10, atol=1e-12):
         raise ValueError("serialized probabilities must lie in the open simplex")
 
     step = float(data["step"])
     refinement_error = float(data["refinement_error"])
+    metric_floor = float(data["metric_floor"])
+    metric_relative_floor = float(data["metric_relative_floor"])
+    refinement_rtol = float(data["refinement_rtol"])
+    refinement_atol = float(data["refinement_atol"])
+    refinement_absolute_error = float(data["refinement_absolute_error"])
+    refinement_tolerance_ratio = float(data["refinement_tolerance_ratio"])
+    jvp_rtol = float(data["jvp_rtol"])
+    jvp_atol = float(data["jvp_atol"])
+    jvp_checked = data.get("jvp_consistency_checked")
+    if not isinstance(jvp_checked, bool):
+        raise ValueError("serialized JVP consistency status must be boolean")
+    jvp_keys = (
+        "jvp_consistency_relative_error",
+        "jvp_consistency_absolute_error",
+        "jvp_consistency_tolerance_ratio",
+    )
+    if jvp_checked:
+        jvp_values = tuple(float(data[key]) for key in jvp_keys)
+    else:
+        if any(data.get(key) is not None for key in jvp_keys):
+            raise ValueError("unchecked JVP diagnostics must use null payloads")
+        jvp_values = (None, None, None)
+    provenance = _provenance_from_dict(data.get("provenance"), m)
     serialization_quantization_error = float(data["serialization_quantization_error"])
     metric_eigenvalue_error_bound = float(
         data["serialization_metric_eigenvalue_error_bound"]
     )
-    if not math.isfinite(step) or step <= 0.0:
-        raise ValueError("serialized step must be finite and positive")
-    if not math.isfinite(refinement_error) or refinement_error < 0.0:
-        raise ValueError("serialized refinement error must be finite and nonnegative")
     if (
         not math.isfinite(serialization_quantization_error)
         or serialization_quantization_error < 0.0
@@ -928,18 +1756,10 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
         raise ValueError("serialized metric eigenvalues are invalid")
     eigenvalue_scale = max(1.0, float(np.linalg.norm(metric, 2)))
     numeric_slack = 32.0 * np.finfo(np.float64).eps * eigenvalue_scale
-    eigenvalue_atol = metric_eigenvalue_error_bound + numeric_slack
-    if not np.allclose(
-        eigenvalues, recomputed, rtol=0.0, atol=eigenvalue_atol
-    ):
+    if not np.allclose(eigenvalues, recomputed, rtol=0.0, atol=numeric_slack):
         raise ValueError("serialized metric eigenvalues disagree with the metric")
 
-    if accepted and rejection_reason:
-        raise ValueError("an accepted packet cannot have a rejection reason")
-    if not accepted and not rejection_reason:
-        raise ValueError("a rejected packet must retain its rejection reason")
-
-    return ConnectionPacket(
+    packet = ConnectionPacket(
         z=z.astype(np.float64),
         step=step,
         q=q.astype(np.float64),
@@ -951,9 +1771,26 @@ def packet_from_dict(data: dict) -> ConnectionPacket:
         refinement_error=refinement_error,
         accepted=accepted,
         rejection_reason=rejection_reason,
+        metric_floor=metric_floor,
+        metric_relative_floor=metric_relative_floor,
+        refinement_rtol=refinement_rtol,
+        refinement_atol=refinement_atol,
+        refinement_absolute_error=refinement_absolute_error,
+        refinement_tolerance_ratio=refinement_tolerance_ratio,
+        jvp_consistency_relative_error=jvp_values[0],
+        jvp_consistency_absolute_error=jvp_values[1],
+        jvp_consistency_tolerance_ratio=jvp_values[2],
+        jvp_rtol=jvp_rtol,
+        jvp_atol=jvp_atol,
+        provenance=provenance,
         serialization_quantization_error=serialization_quantization_error,
         serialization_metric_eigenvalue_error_bound=metric_eigenvalue_error_bound,
     )
+    _validate_packet_semantics(
+        packet,
+        require_reproducible_provenance=require_reproducible_provenance,
+    )
+    return packet
 
 
 def quantization_error(packet: ConnectionPacket) -> float:
@@ -962,6 +1799,8 @@ def quantization_error(packet: ConnectionPacket) -> float:
     worst = 0.0
     for block in (packet.metric, packet.first_kind, packet.cubic):
         roundtrip = block.astype(np.float32).astype(np.float64)
-        scale = max(1.0, float(np.linalg.norm(block)))
-        worst = max(worst, float(np.linalg.norm(block - roundtrip)) / scale)
+        difference = float(np.linalg.norm(block - roundtrip))
+        scale = float(np.linalg.norm(block))
+        relative_error = 0.0 if difference == 0.0 else difference / scale
+        worst = max(worst, relative_error)
     return worst

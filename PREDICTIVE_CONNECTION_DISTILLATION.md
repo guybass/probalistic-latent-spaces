@@ -213,12 +213,28 @@ Every packet shard must store:
   compact-domain bounds;
 - context identifier, \(z\), and finite-difference step size;
 - \((G,L,C)\), metric eigenvalues, and numerical acceptance flags;
-- derivative-refinement errors from at least \((h,h/2,h/4)\);
+- separate absolute metric floor, relative conditioning floor, and the resulting
+  gate category (rank, conditioning, or chart scale);
+- derivative-refinement absolute errors, relative errors, mixed-tolerance
+  ratios, and the frozen \((a_{\rm ref},r_{\rm ref})\) from at least
+  the nested ladder \((h,h/2,h/4)\) and the incommensurate ladder
+  \((h/\sqrt2,h/(2\sqrt2),h/(4\sqrt2))\);
+- when exact logit JVPs are supplied, their gauge-invariant discrepancy from
+  finite-difference logit derivatives and the frozen
+  \((a_{\rm JVP},r_{\rm JVP})\);
 - optional top-\(k\) teacher probabilities plus a declared tail treatment;
-- dtype and quantization metadata.
+- teacher inference dtype and quantization metadata; and
+- an immutable provenance record binding the packet to the teacher revision,
+  tokenizer, outcome map, chart bounds, context, and dtype.
 
-Packets that fail the rank, derivative-convergence, or finite-value gates are
-retained as failures in the audit log but excluded from connection training.
+The chart bounds must contain every axial and mixed stencil point, not only the
+packet center. Packet construction fails before teacher evaluation when the
+largest stencil leaves those bounds.
+
+Packets that fail the rank, conditioning, chart-scale, derivative-convergence,
+exact-JVP-consistency, or finite-value gates are retained as failures in the
+audit log but excluded from connection training. An accepted packet without
+complete reproducible provenance is not serializable as a training artifact.
 
 Packet rejection conditions the experiment on teacher regions where the
 method is numerically well behaved, which is a selection effect. The
@@ -578,12 +594,59 @@ then measure the quantization floor rather than convergence. The packet
 builder therefore declares the teacher inference dtype, runs teacher
 evaluation in float64 on CPU, which is affordable at the pilot scales, and
 prefers exact JVP derivatives wherever autodiff is available, with finite
-differences as the audit path. Use \((h,h/2,h/4)\) with a formal
-Richardson-style acceptance rule: accept a packet only when the extrapolated
-derivative changes by less than a preregistered relative tolerance between
-consecutive refinements, not on a visually judged plateau. Directional
-subsampling may be used during training, but the held-out audit evaluates the
-complete small-chart tensors.
+differences as an audit path. When supplied, the exact logit JVP forms the
+metric, score cubic, and first-derivative leg of the first-kind coefficient.
+It is accepted only when the logits function is also supplied and agrees after
+removing the rowwise softmax gauge. Use both \((h,h/2,h/4)\) and
+\((h/\sqrt2,h/(2\sqrt2),h/(4\sqrt2))\). Require internal Richardson
+convergence on each ladder and agreement between their fine extrapolants under
+the formal mixed acceptance rule
+
+\[
+d(T_{h/2},T_{h/4})
+\le a_{\rm ref}+r_{\rm ref}
+\max\{s(T_{h/2}),s(T_{h/4})\}.
+\]
+
+Both \(d\) and \(s\) must be evaluated on quantities invariant under a linear
+change of the intervention chart, never on raw Frobenius norms of
+\((G,L,C)\). The frozen choices are the dimensionless relative metric defect
+\(\|G_{h/4}^{-1/2}(G_{h/2}-G_{h/4})G_{h/4}^{-1/2}\|_F\) against the scale
+\(\|I\|_F=\sqrt m\), and the Fisher norms of the raised
+\(G^{-1}L\) and \(G^{-1}C\), each extrapolant raised by its own metric. Two
+properties follow, and both are required. First, the verdict is unchanged by
+\(z\mapsto sz\), which rescales \(G,L,C\) by \(s^2,s^3,s^3\); a rule stated on
+raw tensors is a rule about chart units. Second, a structurally vanishing
+\(L\) or \(C\) --- the first-kind coefficient of the boundary Bernoulli family
+used by the nonzero-\(\alpha\) separation in
+[paper/main.tex](paper/main.tex) vanishes identically, since
+\(\langle\partial_{\theta\theta}\psi,\partial_\theta\psi\rangle=0\) there ---
+has a well-defined zero Fisher scale, so its roundoff-level difference is
+compared with \(a_{\rm ref}\)
+rather than with itself. A pure relative rule on the raw tensor instead
+divides roundoff by roundoff and rejects an exactly representable geometry.
+
+The incommensurate ladder closes commensurate-grid aliasing as a silent failure
+mode, including the explicit sinusoidal regression in the test suite. It does
+not make a finite sample set a proof about an arbitrary smooth black-box map;
+the declared regularity assumptions and exact autodiff derivatives remain the
+theorem-grade route where available.
+
+Because \(d\) and \(s\) are dimensionless, \(a_{\rm ref}\) is dimensionless
+too: it is the Fisher-norm magnitude below which a connection or raised-cubic
+coefficient is treated as numerically indistinguishable from zero for this
+gate. This threshold decision does not establish that the exact coefficient
+vanishes. The primary gate freezes
+\(a_{\rm ref}=10^{-6}\) and \(r_{\rm ref}=10^{-3}\). No dimensionful absolute
+floor is admissible for \(G\), \(L\), or \(C\) at any setting, and the
+absolute term must not be implemented by silently replacing the tensor scale
+by one. The exact-JVP audit compares two estimates of the same
+gauge-centred Jacobian, whose scale cannot vanish on a chart direction that
+survives the rank gate; it therefore keeps a purely relative rule with
+\(a_{\rm JVP}=0\). Store the absolute error, the regularized
+relative error, and the tolerance ratio. Directional subsampling may be used
+during training, but the held-out audit evaluates the complete small-chart
+tensors.
 
 ## 6. Training curriculum
 
@@ -610,13 +673,18 @@ Before packet generation, freeze:
    declared teacher inference dtype, float64 on CPU at pilot scales.
 2. Construct \((q_T,G_T,L_T,C_T)\) in float64, with score-moment cubics from
    JVPs or logit differences as the primary estimator.
-3. Repeat at \((h,h/2,h/4)\).
-4. Reject nonconvergent or rank-deficient packets according to the frozen gates.
+3. Repeat on the nested and \(1/\sqrt2\)-rescaled ladders, rejecting unless
+   both converge internally and their fine extrapolants agree.
+4. Reject nonconvergent, exact-JVP-inconsistent, rank-deficient,
+   ill-conditioned, or chart-scale-deficient packets according to the frozen
+   gates, recording the distinct reason.
 5. Audit the teacher \(H^{s_*}\) norm or declare the lower-order roughness
    quantity to be heuristic only.
 6. Serialize the geometric sidecar in float32, retain the output anchor in
    float64 unless a separately error-bounded compression is declared, and
-   retain float64 audit summaries.
+   retain float64 audit summaries. Recompute the metric spectrum and complete
+   ordered gate on the actual float32 payload; refuse serialization if the
+   verdict changes.
 7. Regenerate a random 1% sample and require checksum and tolerance agreement.
 
 ### Phase 2: output-distillation warm start
@@ -732,7 +800,7 @@ orientation. Every arm must report the achieved training values of its active
 geometric terms; a control-arm floor visibly above D4's invalidates the
 corresponding contrast for that run.
 
-The primary contrasts are
+The preregistered mechanistic contrasts are
 
 \[
 J_\psi-J_z,\qquad
@@ -756,7 +824,10 @@ intrinsic packet route against the stronger oriented predictive Jacobian.
 The **-H** and **-R2** contrasts test anti-oscillation regularization;
 only the former can be compared to the theorem assumptions after its measured
 audit passes. D6 is secondary because it introduces additional solver and
-path-design choices.
+path-design choices. Confirmatory status is not conferred by this list: the
+global candidate-arm claims and their multiplicity procedure are fixed in
+Sections 9.6 and 10. Contrasts not entering one of those global claims are
+secondary and may not be promoted using an unadjusted component p-value.
 
 Hyperparameters are selected with either an NLL-matched constraint or a full
 behavior--NLL Pareto frontier. Every arm receives the same number of pilot
@@ -882,30 +953,154 @@ noninjective earlier map or complete coarsening.
 
 ### 9.5 Statistical units
 
-The independent units are training seed, prompt template, lexical family, and
-semantic operation. Token probabilities and finite-difference stencil points
-are not independent observations. Use paired seed comparisons and hierarchical
-bootstrap intervals over seeds and prompt families.
+Training runs are independent only across independently initialized model
+seeds. Prompt templates, lexical families, and semantic operations are sampled
+factors that may be crossed or nested within a run; they are not automatically
+independent units. Token probabilities, chart points, finite-difference stencil
+points, checkpoints, and repeated evaluations of one trained model are not
+independent observations. Freeze the prompt-family sampling frame before
+training. Use paired arm contrasts within seed, retain checkpoint pairing, and
+use a multilevel bootstrap or crossed random-effects analysis whose resampling
+scheme matches the realized design (seed first, then prompt family and lexical
+item within their actual nesting; use a multiway cluster bootstrap when prompt
+and operation are crossed). Report the number of independent trained models
+separately from the number of prompts and packets.
+
+### 9.6 Confirmatory claim and multiplicity procedure
+
+The confirmatory unit is a candidate connection arm, not an individual
+favorable contrast chosen after inspection. Let
+
+\[
+\mathcal B_{D3}=\{D1,J_z,J_\psi,D2\},
+\qquad
+\mathcal B_{D4}=\{D1,J_z,J_\psi,D2,D3\},
+\]
+
+with D5 added to \(\mathcal B_{D4}\) when cubic orientation is part of the
+confirmatory claim.
+
+For each candidate \(C\in\{D3,D4\}\) and required control
+\(B\in\mathcal B_C\), use the same preregistered seed-first multilevel model
+or resampling procedure to obtain four one-sided p-values. The versioned
+analysis manifest must name one scalar behavioral score \(S_{\rm beh}\), with
+higher values better, and freeze its transformation, aggregation over the
+prompt/operation frame, fitted model or resampling statistic, missing-data
+rule, and number of resamples before confirmatory training. For composition
+error the default score is minus the Fisher--Rao error, not the error itself.
+The positive scale \(s_{\rm beh}\) is the D1 between-seed standard deviation
+estimated in the engineering pilot and frozen in that manifest; it is not
+re-estimated from unblinded confirmatory outcomes. Define
+
+\[
+\Delta^{\rm beh}_{C,B}
+=\frac{\mathbb E(S_{{\rm beh},C}-S_{{\rm beh},B})}{s_{\rm beh}},
+\quad
+\Delta^{\rm tr}_{C,B}=\mathbb E(E_{{\rm tr},B}-E_{{\rm tr},C}),
+\]
+
+and use four one-sided p-values:
+
+- behavioral superiority, with higher behavior better;
+- held-out transport-error superiority, with lower error better;
+- validation-NLL noninferiority with margin 0.01 nats/token; and
+- intention-to-treat feasibility noninferiority with margin 0.02.
+
+The behavioral and transport nulls are
+\(\Delta^{\rm beh}_{C,B}\le0\) and \(\Delta^{\rm tr}_{C,B}\le0\).
+Writing \(\Delta^{\rm NLL}_{C,B}
+=\mathbb E(\operatorname{NLL}_C-\operatorname{NLL}_B)\) and
+\(\Delta^{\rm feas}_{C,B}=\pi_C-\pi_B\), the other nulls are
+\(\Delta^{\rm NLL}_{C,B}\ge0.01\) and
+\(\Delta^{\rm feas}_{C,B}\le-0.02\). Define the candidate intersection-union
+p-value
+
+\[
+p_C=\max_{B\in\mathcal B_C}
+\max\{p^{\rm beh}_{C,B},p^{\rm tr}_{C,B},
+p^{\rm NLL}_{C,B},p^{\rm feas}_{C,B}\}.
+\]
+
+This maximum is a valid p-value for the union null that at least one required
+component fails. No additional correction is needed among its components
+because the claim is made only when every component rejects. To control the
+choice between D3 and D4, apply Holm's procedure at familywise 0.05 to the two
+global values \(p_{D3}\) and \(p_{D4}\): the smaller is compared with 0.025 and,
+only if it rejects, the larger with 0.05. Equivalently, report the standard
+Holm-adjusted global p-value for each candidate. If a candidate is reached at
+Holm local level \(\alpha_C\), invert the same fitted model or resampling test
+to report decision-compatible one-sided component bounds at level
+\(1-\alpha_C\): the behavioral and transport lower bounds must exceed zero,
+the NLL upper bounds must be below 0.01, and the feasibility lower bounds must
+exceed \(-0.02\), for every required control. Also report ordinary unadjusted
+95% one-sided bounds for estimation, including when the global claim fails;
+they do not override the Holm decision.
+
+The practical behavioral threshold is additional to this test:
+\(\min_{B\in\mathcal B_C}\widehat\Delta^{\rm beh}_{C,B}\ge0.20\).
+This is an observed-effect gate, not a confidence claim that the population
+effect is at least 0.20. Packet coverage, Fisher
+alignment, intervention-length, certificate, numerical-sensitivity, and
+held-out-stratum requirements are deterministic conjunctive gates applied
+after the Holm decision; they do not rescue a failed statistical component.
+The confirmatory analysis uses NLL noninferiority. A Pareto-frontier analysis
+is exploratory unless its dominance statistic and multiplicity family are
+separately frozen before training.
+
+A D4 claim that the teacher cubic's orientation matters additionally requires
+the preregistered D4--D5 behavioral and transport superiority components, NLL
+and feasibility noninferiority, and comparable achieved geometric-loss floors.
+Those four D5 components are included inside \(p_{D4}\); omitting D5 permits a
+generic D4 connection-distillation claim but not a cubic-orientation claim.
+Any operation-specific candidate claim is another global hypothesis and must
+be added to the Holm family before data inspection; with \(m\) frozen global
+hypotheses, use the full \(m\)-step Holm procedure rather than the two-candidate
+shortcut above. The contrasts
+\(J_\psi-J_z\) and \(D2-D1\), regularity variants, D6, and geometric mechanism
+outcomes remain secondary unless a separate confirmatory family is frozen.
 
 ## 10. Success and falsification
 
 A positive connection-distillation result requires all of:
 
-1. D3 or D4 improves held-out transport over D1, Jz, Jpsi, and D2;
-2. it improves a preregistered behavioral transfer outcome;
-3. validation NLL is matched or the arm lies on a better Pareto frontier;
-4. the preregistered primary behavioral outcome improves with paired seed
-   effects and hierarchical bootstrap intervals (Section 9.5) clearing a
-   preregistered practical-effect threshold; with four seeds this is a
+1. packet acceptance coverage is at least 90% overall and 80% in every frozen
+   context-by-operation stratum; all rejected packets remain in the
+   intention-to-treat feasibility denominator;
+2. D3 or D4 rejects its global intersection-union null under the Section 9.6
+   Holm procedure, which requires behavioral and transport superiority over
+   every required control plus NLL and feasibility noninferiority;
+3. its minimum behavioral point improvement over those controls is at least
+   0.20 frozen D1-pilot between-seed standard deviations;
+4. every component estimate, raw p-value, Holm-adjusted global p-value,
+   unadjusted 95% one-sided bound, and decision-compatible bound described in
+   Section 9.6 is reported, including components that fail;
+5. the primary analysis follows the realized crossed/nested design in Section
+   9.5 and the frozen Section 9.6 multiplicity procedure; with four seeds this is a
    preliminary pilot criterion, and simple three-of-four counting is a pilot
    stopping rule, not a confirmatory standard;
-5. the gain survives finite-difference, rank, and ODE-step sensitivity;
-6. it beats the context-shuffled cubic control D5 when that arm is run, with
-   comparable achieved geometric-loss floors across the compared arms;
-7. it transfers to contexts and semantic operations excluded from packet
+6. the held-out teacher--student Fisher alignment map has all singular values
+   in \([0.5,2]\), and any claimed relative transport certificate is at most
+   0.10 on the reported paths; within every frozen stratum, the student's
+   median declared-intervention Fisher length is at least 90% of D1's, so loss
+   reduction by intervention shrinkage fails the gate;
+7. the gain survives finite-difference, rank, chart-scale, and ODE-step
+   sensitivity;
+8. any cubic-orientation claim includes D5 inside the D4 global hypothesis and
+   has comparable achieved geometric-loss floors across D4 and D5;
+9. it transfers to contexts and semantic operations excluded from packet
    generation;
-8. any risk-to-transport interpretation reports stable measured
+10. any risk-to-transport interpretation reports stable measured
    \(H^{s_*}\) envelopes, chart-sampling error, and Fisher spectral floors.
+
+Feasibility is a co-primary two-part outcome: its intention-to-treat
+noninferiority test is a component of the global candidate hypothesis, followed
+by conditional error among jointly feasible paths. Dropping failed paths or
+failed seeds is prohibited. Before a confirmatory run, simulate the frozen
+multilevel design and choose the number of independent training seeds to give
+at least 80% power for the 0.20-standard-deviation target after multiplicity
+control using the same intersection-union and Holm decision rule and the frozen
+D1-pilot scale. Five seeds,
+by itself, is not a confirmatory design.
 
 The hypothesis is unsupported when:
 
@@ -1056,7 +1251,7 @@ Transport solves the linear ODE
 \[
 \Phi_T(1,0)-\Phi_S(1,0)
 =\int_0^1\Phi_S(1,s)\,
-\bigl(A_S(s)-A_T(s)\bigr)\,\Phi_T(s,0)\,ds,
+\bigl(A_T(s)-A_S(s)\bigr)\,\Phi_T(s,0)\,ds,
 \qquad
 A_M(t)=-\Gamma_M(\gamma(t))[\dot\gamma(t)],
 \]
@@ -1095,7 +1290,9 @@ the same formula is an empirical diagnostic that must be checked against
 independently refined integrated transport and must not be called a guarantee.
 The formula and an analytic-fixture verification against exactly integrated
 transport are implemented in `src/predictive_geometry/distillation.py` and
-`tests/test_distillation_packets.py`.
+`tests/test_distillation_packets.py`. The implementation returns a typed audit
+record, not a bare scalar: callers must declare `certified` or `sampled` and
+provide the source of the continuum inputs.
 
 ### 11.4 Remaining open target: certified surrogate residual
 
@@ -1162,21 +1359,28 @@ schema exist. Under this rule, items 1 and 5 are implemented; items 2--4 are
 not.
 
 1. `src/predictive_geometry/distillation.py` --- **implemented**:
-   - shared-chart packet dataclass with checksummed float32 geometric tensors,
-     a float64 output anchor, strict-JSON audit metadata, an explicit status
-     for a non-finite secondary cubic audit, a measured spectral quantization
+   - version-6 shared-chart packet dataclass with checksummed float32 geometric
+     tensors, a float64 output anchor, strict-JSON audit metadata, complete
+     immutable model/tokenizer/outcome/chart provenance, an explicit status for
+     a non-finite secondary cubic audit, a measured spectral quantization
      bound, invariant checks, and schema-version validation;
-   - central-difference jet assembly for \(G\) and \(L\), strict open-simplex
-     validation, and score-moment cubic assembly from float64 logits or exact
-     logit JVPs, with the probability-difference form as audit;
-   - Richardson-tolerance, finite-value, and rank acceptance gates with
-     rejection reasons retained for coverage reporting;
+   - dual-ladder central-difference jet assembly for \(G\) and \(L\), strict
+     open-simplex and full-stencil chart-bound validation, and score-moment
+     cubic assembly from float64 logits or exact logit JVPs, with the
+     probability-difference form as audit;
+   - a fail-closed invariant mixed Richardson gate, optional recorded
+     roundoff-derived absolute sensitivity floors, and an exact-JVP consistency
+     gate, plus separate finite-value, algebraic-rank, relative-conditioning,
+     and absolute chart-scale gates, with diagnostics and distinct rejection
+     reasons retained for coverage reporting;
    - centered-logit and square-root Jacobian control losses;
    - metric, first-kind LC, and raised-cubic losses in teacher-Fisher norms;
    - the Section 11.2 packet-to-connection and Section 11.3
      packet-to-transport bounds;
-   - a one-dimensional finite-difference Sobolev grid audit (empirical, per
-     Section 11.4), the sufficiency decomposition of Section 9.4, and the
+   - a one-dimensional finite-difference Sobolev grid audit using the whole
+     grid and composite Simpson quadrature (empirical, per Section 11.4), the
+     sufficiency decomposition of Section 9.4 with explicit empirical and
+     population-unbiased estimands, and the
      whole-context-block cubic control of Section 7, explicitly without a
      joint-realizability guarantee for the composite \((G,L,C)\) target.
    The multi-dimensional \(H^{s_*}\) audit and the band-limited chart basis
@@ -1207,13 +1411,21 @@ not.
      regression for the covariant-index unfolding used by Section 11.2;
    - the one-dimensional Sobolev grid audit against a closed form;
    - the KL-only oscillatory escape;
-   - rank-gate and Richardson refinement-gate rejections;
-   - checksummed serialization round-trip and float32 quantization error;
-   - the strict distinction between Jacobian and Gram-metric matching;
-   - exact additivity of the sufficiency decomposition on discrete fibers;
+   - distinct rank, conditioning, chart-scale, Richardson-refinement, and
+     exact-JVP-consistency gate rejections;
+   - checksummed serialization round-trip, mandatory reproducible provenance,
+     recomputable accepted and rejected semantics, post-quantization spectral
+     gating, and float32 quantization error;
+   - the strict distinction between Jacobian and Gram-metric matching and
+     rowwise logit-gauge invariance for the declared
+     `(chart_dimension, outcomes)` layout;
+   - exact additivity of both sufficiency estimands on discrete fibers and the
+     two-state-per-fiber finite-sample correction;
    - stratum-preserving whole-context-block cubic controls, invalid-simplex
      rejection, float64-logit enforcement, logit-gauge invariance, all-field
-     checksum tampering, and schema-version rejection.
+     checksum tampering, schema-version rejection, commensurate-grid aliasing,
+     out-of-bound stencils, singularizing float32 metrics, and forged rejection
+     reasons.
 
 ## 14. Decision sequence
 

@@ -18,12 +18,11 @@ floor) is the relevant extra assumption.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-
 
 Tensor3 = NDArray[np.float64]
 

@@ -1,0 +1,150 @@
+\begin{thebibliography}{20}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Adams and Fournier(2003)]{adamsFournier2003}
+Robert~A. Adams and John J.~F. Fournier.
+\newblock \emph{Sobolev Spaces}, volume 140 of \emph{Pure and Applied
+  Mathematics}.
+\newblock Academic Press, Amsterdam, 2 edition, 2003.
+\newblock ISBN 978-0-12-044143-3.
+
+\bibitem[Amari(2016)]{amari2016}
+Shun-ichi Amari.
+\newblock \emph{Information Geometry and Its Applications}, volume 194 of
+  \emph{Applied Mathematical Sciences}.
+\newblock Springer, Tokyo, 2016.
+\newblock \doi{10.1007/978-4-431-55978-8}.
+
+\bibitem[Amari and Nagaoka(2000)]{amariNagaoka2000}
+Shun-ichi Amari and Hiroshi Nagaoka.
+\newblock \emph{Methods of Information Geometry}, volume 191 of
+  \emph{Translations of Mathematical Monographs}.
+\newblock American Mathematical Society and Oxford University Press,
+  Providence, RI, 2000.
+\newblock ISBN 978-0-8218-0531-2.
+
+\bibitem[Arvanitidis et~al.(2022)Arvanitidis, Gonz{\'a}lez-Duque, Pouplin,
+  Kalatzis, and Hauberg]{arvanitidisEtAl2022}
+Georgios Arvanitidis, Miguel Gonz{\'a}lez-Duque, Alison Pouplin, Dimitrios
+  Kalatzis, and Soren Hauberg.
+\newblock Pulling back information geometry.
+\newblock In \emph{Proceedings of the 25th International Conference on
+  Artificial Intelligence and Statistics}, volume 151 of \emph{Proceedings of
+  Machine Learning Research}, pages 4872--4894. PMLR, 2022.
+\newblock URL \url{https://proceedings.mlr.press/v151/arvanitidis22b.html}.
+
+\bibitem[Ay et~al.(2015)Ay, Jost, L{\^e}, and
+  Schwachh{\"o}fer]{ayJostLeSchwachhofer2015}
+Nihat Ay, J{\"u}rgen Jost, H{\^o}ng~V{\^a}n L{\^e}, and Lorenz
+  Schwachh{\"o}fer.
+\newblock Information geometry and sufficient statistics.
+\newblock \emph{Probability Theory and Related Fields}, 162:\penalty0 327--364,
+  2015.
+\newblock \doi{10.1007/s00440-014-0574-8}.
+
+\bibitem[Ay et~al.(2018)Ay, Jost, L{\^e}, and
+  Schwachh{\"o}fer]{ayEtAl2018parametrized}
+Nihat Ay, J{\"u}rgen Jost, H{\^o}ng~V{\^a}n L{\^e}, and Lorenz
+  Schwachh{\"o}fer.
+\newblock Parametrized measure models.
+\newblock \emph{Bernoulli}, 24\penalty0 (3):\penalty0 1692--1725, 2018.
+\newblock \doi{10.3150/16-BEJ910}.
+
+\bibitem[Calin and Udri{\c{s}}te(2014)]{calinUdriste2014}
+Ovidiu Calin and Constantin Udri{\c{s}}te.
+\newblock \emph{Geometric Modeling in Probability and Statistics}.
+\newblock Springer Monographs in Mathematics. Springer, Cham, 2014.
+\newblock \doi{10.1007/978-3-319-07779-6}.
+
+\bibitem[Cencov(1982)]{cencov1982}
+N.~N. Cencov.
+\newblock \emph{Statistical Decision Rules and Optimal Inference}, volume~53 of
+  \emph{Translations of Mathematical Monographs}.
+\newblock American Mathematical Society, Providence, RI, 1982.
+\newblock \doi{10.1090/mmono/053}.
+
+\bibitem[Gneiting and Raftery(2007)]{gneitingRaftery2007}
+Tilmann Gneiting and Adrian~E. Raftery.
+\newblock Strictly proper scoring rules, prediction, and estimation.
+\newblock \emph{Journal of the American Statistical Association}, 102\penalty0
+  (477):\penalty0 359--378, 2007.
+\newblock \doi{10.1198/016214506000001437}.
+
+\bibitem[Hu et~al.(2026)Hu, Niu, and Varma]{huNiuVarma2026}
+Zhimin Hu, Lanhao Niu, and Sashank Varma.
+\newblock Language models represent and transform concepts with shared
+  geometry, 2026.
+
+\bibitem[Huh et~al.(2024)Huh, Cheung, Wang, and Isola]{huhEtAl2024}
+Minyoung Huh, Brian Cheung, Tongzhou Wang, and Phillip Isola.
+\newblock Position: The platonic representation hypothesis.
+\newblock In \emph{Proceedings of the 41st International Conference on Machine
+  Learning}, volume 235 of \emph{Proceedings of Machine Learning Research},
+  pages 20617--20642. PMLR, 2024.
+\newblock URL \url{https://proceedings.mlr.press/v235/huh24a.html}.
+
+\bibitem[Mabrok(2026)]{mabrok2026}
+Mohamed~A. Mabrok.
+\newblock Latent semantic manifolds in large language models, 2026.
+
+\bibitem[Park et~al.(2026)Park, Nief, Choe, and Veitch]{parkEtAl2026}
+Kiho Park, Todd Nief, Yo~Joong Choe, and Victor Veitch.
+\newblock The information geometry of softmax: Probing and steering.
+\newblock In \emph{Proceedings of the 43rd International Conference on Machine
+  Learning}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2602.15293}.
+
+\bibitem[Rezakhani et~al.(2019)Rezakhani, Hassani, and
+  Alipour]{rezakhaniHassaniAlipour2019}
+A.~T. Rezakhani, M.~Hassani, and S.~Alipour.
+\newblock Continuity of the quantum fisher information.
+\newblock \emph{Physical Review A}, 100\penalty0 (3):\penalty0 032317, 2019.
+\newblock \doi{10.1103/PhysRevA.100.032317}.
+
+\bibitem[Sarfati et~al.(2026)Sarfati, Bigelow, Wurgaft, Boppana, Merullo,
+  Geiger, Lewis, McGrath, and Lubana]{sarfatiEtAl2026}
+Rapha{\"e}l Sarfati, Eric Bigelow, Daniel Wurgaft, Siddharth Boppana, Jack
+  Merullo, Atticus Geiger, Owen Lewis, Tom McGrath, and Ekdeep~Singh Lubana.
+\newblock The shape of beliefs: Geometry, dynamics, and interventions along
+  representation manifolds of language models' posteriors, 2026.
+\newblock Version 2 revised May 2026.
+
+\bibitem[Sevetlidis and Pavlidis(2026)]{sevetlidisPavlidis2026}
+Vasileios Sevetlidis and George Pavlidis.
+\newblock Gauge-invariant representation holonomy.
+\newblock In \emph{The Fourteenth International Conference on Learning
+  Representations}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2601.21653}.
+
+\bibitem[Wang and Zhao(2026)]{wangZhao2026}
+Sihan Wang and Jiayi Zhao.
+\newblock {FishBack}: Pullback fisher geometry for optimal activation steering
+  in transformers, 2026.
+
+\bibitem[Yamaguchi and Nozawa(2024)]{yamaguchiNozawa2024}
+Kaori Yamaguchi and Hiraku Nozawa.
+\newblock On statistics which are almost sufficient from the viewpoint of the
+  fisher metrics.
+\newblock \emph{Information Geometry}, 7\penalty0 (2):\penalty0 543--553, 2024.
+\newblock \doi{10.1007/s41884-024-00160-1}.
+
+\bibitem[Yu et~al.(2025)Yu, Inal, Arvanitidis, Hauberg, Locatello, and
+  Fumero]{yuEtAl2025}
+Hanlin Yu, Berfin Inal, Georgios Arvanitidis, S{\o}ren Hauberg, Francesco
+  Locatello, and Marco Fumero.
+\newblock Connecting neural models latent geometries with relative geodesic
+  representations.
+\newblock In \emph{Advances in Neural Information Processing Systems},
+  volume~38, 2025.
+\newblock \doi{10.52202/085713-3769}.
+
+\bibitem[Zhang(2025)]{zhang2025}
+Yifan Zhang.
+\newblock A markov categorical framework for language modeling, 2025.
+\newblock Version 5 revised May 2026.
+
+\end{thebibliography}

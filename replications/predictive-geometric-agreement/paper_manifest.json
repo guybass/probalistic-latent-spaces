@@ -1,0 +1,37 @@
+{
+  "compute": {
+    "cluster_profile_hint": "",
+    "mode": "auto"
+  },
+  "paper_slug": "predictive-geometric-agreement",
+  "paper_title": "Predictive Geometric Agreement",
+  "policies": {
+    "artifact_provenance_required": true,
+    "author_code_paths": [],
+    "author_code_policy": "forbid_by_default",
+    "baseline_method_evidence_required": true,
+    "baseline_method_policy": "paper-faithful",
+    "baseline_pattern_matching_forbidden": true,
+    "comparison_evidence_required": true,
+    "manual_artifact_claims_forbidden": true,
+    "paper_assets_reference_only": true,
+    "stack_policy": "paper-driven",
+    "target_progression": "single-active-target"
+  },
+  "reproduce": {
+    "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/reproduce_all.ps1",
+    "report_path": "report/main.tex"
+  },
+  "schema_version": 1,
+  "source": {
+    "checksum": "",
+    "compiled_pdf": "",
+    "entrypoint": "main.tex",
+    "extracted_path": "",
+    "location": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\paper"
+  },
+  "source_mode": "latex-first",
+  "state": {
+    "current_phase": "paper-intake"
+  }
+}

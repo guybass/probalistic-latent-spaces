@@ -10,15 +10,16 @@ gates, serialization, the Jacobian/Gram distinction, the sufficiency
 decomposition, and the context-shuffled cubic control.
 """
 
-from dataclasses import replace
 import json
 import math
 import unittest
+from dataclasses import replace
 
 import numpy as np
 
 from predictive_geometry.distillation import (
     ConnectionPacket,
+    PacketProvenance,
     alpha_connection,
     build_packet,
     build_packet_from_logits,
@@ -64,6 +65,24 @@ def affine_exact_moments(unembedding, z):
     return probabilities, metric, 0.5 * cubic, cubic
 
 
+def with_test_provenance(packet):
+    dimension = packet.z.size
+    return replace(
+        packet,
+        provenance=PacketProvenance(
+            teacher_model_id="test/model",
+            teacher_revision="0123456789abcdef",
+            tokenizer_hash="sha256:test-tokenizer",
+            outcome_map_hash="sha256:test-outcomes",
+            chart_id="test-chart",
+            chart_bounds=tuple((-1.0, 1.0) for _ in range(dimension)),
+            context_id="test-context",
+            inference_dtype="float64",
+            reproducible=True,
+        ),
+    )
+
+
 def bernoulli_family():
     """The paper's boundary family ``theta -> (sin^2, cos^2)(theta/2)``."""
 
@@ -99,7 +118,12 @@ class TestPacketIdentities(unittest.TestCase):
     def test_bernoulli_closed_forms(self):
         theta = 1.0
         packet = build_packet(bernoulli_family(), [theta], 1e-4)
+        # The exact first-kind tensor vanishes for this family. The gate
+        # compares raised tensors in the Fisher norm against a dimensionless
+        # floor, so a structurally zero coefficient is treated as numerically
+        # indistinguishable from zero rather than divided by its own roundoff.
         self.assertTrue(packet.accepted)
+        self.assertEqual(packet.rejection_reason, "")
         np.testing.assert_allclose(packet.metric, [[1.0]], atol=1e-8)
         self.assertLess(abs(packet.first_kind[0, 0, 0]), 1e-6)
         self.assertAlmostEqual(
@@ -241,6 +265,30 @@ class TestCubicEstimators(unittest.TestCase):
         centered = derivative - probabilities @ derivative
         exact_cubic = probabilities @ np.power(centered, 3)
         self.assertAlmostEqual(packet.cubic[0, 0, 0], exact_cubic, places=12)
+        self.assertTrue(packet.accepted)
+        self.assertIsNotNone(packet.jvp_consistency_tolerance_ratio)
+        self.assertLessEqual(packet.jvp_consistency_tolerance_ratio, 1.0)
+
+    def test_incorrect_exact_logit_jvp_is_rejected(self):
+        probability = 0.3
+        log_odds = math.log(probability / (1.0 - probability))
+
+        def logits_fn(z):
+            return np.array([log_odds + float(z[0]), 0.0], dtype=np.float64)
+
+        def wrong_jacobian(_z):
+            return np.zeros((1, 2), dtype=np.float64)
+
+        packet = build_packet_from_logits(
+            logits_fn,
+            [0.0],
+            1e-2,
+            logit_jacobian_fn=wrong_jacobian,
+        )
+        self.assertFalse(packet.accepted)
+        self.assertEqual(packet.rejection_reason, "jvp_consistency")
+        self.assertAlmostEqual(packet.cubic[0, 0, 0], 0.0)
+        self.assertAlmostEqual(packet.cubic_audit[0, 0, 0], 0.084, places=6)
 
 
 class TestLossesAndControls(unittest.TestCase):
@@ -258,15 +306,30 @@ class TestLossesAndControls(unittest.TestCase):
 
     def test_jacobian_versus_gram_distinction(self):
         rng = np.random.default_rng(23)
-        teacher_jacobian = rng.normal(size=(8, 2))
+        teacher_sqrt_jacobian = rng.normal(size=(8, 2))
         rotation, _ = np.linalg.qr(rng.normal(size=(8, 8)))
-        student_jacobian = rotation @ teacher_jacobian
-        teacher_metric = teacher_jacobian.T @ teacher_jacobian
-        student_metric = student_jacobian.T @ student_jacobian
+        student_sqrt_jacobian = rotation @ teacher_sqrt_jacobian
+        teacher_metric = teacher_sqrt_jacobian.T @ teacher_sqrt_jacobian
+        student_metric = student_sqrt_jacobian.T @ student_sqrt_jacobian
         self.assertLess(metric_relative_loss(student_metric, teacher_metric), 1e-20)
-        self.assertGreater(sqrt_jacobian_loss(student_jacobian, teacher_jacobian), 0.1)
         self.assertGreater(
-            centered_logit_jacobian_loss(student_jacobian, teacher_jacobian), 0.0
+            sqrt_jacobian_loss(student_sqrt_jacobian, teacher_sqrt_jacobian), 0.1
+        )
+        self.assertGreater(
+            centered_logit_jacobian_loss(
+                student_sqrt_jacobian.T,
+                teacher_sqrt_jacobian.T,
+            ),
+            0.0,
+        )
+
+    def test_centered_logit_jacobian_loss_removes_rowwise_gauge(self):
+        rng = np.random.default_rng(24)
+        teacher = rng.normal(size=(2, 7))
+        pure_gauge = np.array([1.0, -0.2])[:, None]
+        self.assertLess(
+            centered_logit_jacobian_loss(teacher + pure_gauge, teacher),
+            1e-28,
         )
 
     def test_sufficiency_decomposition_is_exactly_additive(self):
@@ -278,11 +341,27 @@ class TestLossesAndControls(unittest.TestCase):
             transferred[fibers == fiber] = rng.normal(size=2)
         metric = np.array([[2.0, 0.3], [0.3, 1.0]])
         insufficiency, mismatch, total = sufficiency_decomposition(
-            fibers, effects, transferred, metric
+            fibers, effects, transferred, metric, estimand="empirical"
         )
         self.assertGreaterEqual(insufficiency, 0.0)
         self.assertGreaterEqual(mismatch, 0.0)
         self.assertAlmostEqual(total, insufficiency + mismatch, places=12)
+
+    def test_population_sufficiency_correction_reallocates_finite_fiber_bias(self):
+        fibers = np.array([0, 0])
+        effects = np.array([[-1.0], [1.0]])
+        transferred = np.array([[-1.0], [-1.0]])
+        insufficiency, mismatch, total = sufficiency_decomposition(
+            fibers,
+            effects,
+            transferred,
+            np.eye(1),
+            estimand="population_unbiased",
+        )
+        self.assertAlmostEqual(insufficiency, 2.0)
+        self.assertAlmostEqual(mismatch, 0.0)
+        self.assertAlmostEqual(total, 2.0)
+        self.assertAlmostEqual(total, insufficiency + mismatch)
 
     def test_context_shuffled_cubics_move_complete_context_blocks(self):
         contexts = ["a", "a", "b", "b", "c", "c", "d", "d"]
@@ -415,9 +494,40 @@ class TestBounds(unittest.TestCase):
             holder,
             holder,
             fill_distance,
+            evidence_status="certified",
+            evidence_source="analytic Bernoulli fixture",
         )
-        self.assertLessEqual(true_defect, bound)
-        self.assertLess(bound, 1.0)
+        self.assertEqual(bound.evidence_status, "certified")
+        self.assertLessEqual(true_defect, bound.value)
+        self.assertLess(bound.value, 1.0)
+
+    def test_transport_bound_returns_infinity_instead_of_overflowing(self):
+        bound = packet_transport_bound(
+            1000.0,
+            1.0,
+            1.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            evidence_status="sampled",
+            evidence_source="overflow regression grid",
+        )
+        self.assertTrue(math.isinf(bound.value))
+
+    def test_transport_bound_requires_valid_evidence_label(self):
+        with self.assertRaisesRegex(ValueError, "evidence_status"):
+            packet_transport_bound(
+                1.0,
+                1.0,
+                1.0,
+                0.1,
+                0.1,
+                0.1,
+                0.1,
+                evidence_status="assumed",
+                evidence_source="fixture",
+            )
 
 
 class TestAuditsAndGates(unittest.TestCase):
@@ -433,7 +543,15 @@ class TestAuditsAndGates(unittest.TestCase):
             + float(slope @ slope) / 3.0
         )
         exact = zeroth + float(slope @ slope)
-        self.assertAlmostEqual(estimate, exact, places=2)
+        self.assertAlmostEqual(estimate, exact, places=10)
+
+    def test_sobolev_grid_audit_is_exact_for_coarse_linear_h1(self):
+        values = np.array([[0.0], [0.5], [1.0]])
+        self.assertAlmostEqual(sobolev_grid_audit(values, 0.5, 1), 4.0 / 3.0)
+
+    def test_sobolev_grid_audit_rejects_underresolved_order(self):
+        with self.assertRaisesRegex(ValueError, "requires at least"):
+            sobolev_grid_audit(np.array([[17.0]]), 1.0, 4)
 
     def test_oscillatory_escape_small_kl_large_metric_gap(self):
         epsilon = 1e-3
@@ -480,6 +598,178 @@ class TestAuditsAndGates(unittest.TestCase):
         self.assertFalse(packet.accepted)
         self.assertEqual(packet.rejection_reason, "refinement")
 
+    def test_refinement_gate_rejects_small_aliased_metric(self):
+        step = 0.1
+        frequency = 2.0 * math.pi / step
+        amplitude = 1e-3 / frequency
+
+        def aliased(z):
+            wobble = amplitude * math.sin(frequency * float(z[0]))
+            return np.array([0.5 + wobble, 0.5 - wobble])
+
+        packet = build_packet(aliased, [0.0], step)
+        self.assertFalse(packet.accepted)
+        self.assertEqual(packet.rejection_reason, "refinement")
+        self.assertGreater(packet.refinement_tolerance_ratio, 1.0)
+
+    def test_incommensurate_audit_rejects_commensurate_logit_alias(self):
+        step = 0.02
+        slopes = np.array([0.0, 1.0, 3.0])
+        direction = np.array([1.0, -0.2, -0.8])
+        amplitude = 1e-3
+        frequency = 8.0 * math.pi / step
+
+        def logits_fn(z):
+            value = float(z[0])
+            return np.asarray(
+                slopes * value
+                + amplitude * math.sin(frequency * value) * direction,
+                dtype=np.float64,
+            )
+
+        def aliased_jacobian(_z):
+            return slopes[None, :].copy()
+
+        exact_derivative = slopes + amplitude * frequency * direction
+        exact_score = exact_derivative - exact_derivative.mean()
+        exact_metric = float(np.mean(np.square(exact_score)))
+
+        finite_difference_packet = build_packet_from_logits(
+            logits_fn,
+            [0.0],
+            step,
+        )
+        self.assertGreater(
+            abs(finite_difference_packet.metric.item() - exact_metric) / exact_metric,
+            4.9,
+        )
+        self.assertFalse(finite_difference_packet.accepted)
+        self.assertEqual(finite_difference_packet.rejection_reason, "refinement")
+
+        false_jvp_packet = build_packet_from_logits(
+            logits_fn,
+            [0.0],
+            step,
+            logit_jacobian_fn=aliased_jacobian,
+        )
+        self.assertFalse(false_jvp_packet.accepted)
+        self.assertEqual(false_jvp_packet.rejection_reason, "jvp_consistency")
+        self.assertGreater(false_jvp_packet.jvp_consistency_tolerance_ratio, 1.0)
+
+    def test_default_refinement_gate_rejects_small_chart_first_kind_error(self):
+        step = 0.1
+        phase = 0.4
+        frequency = 5.0 / step
+        chart_scale = 1e-4
+        amplitude = chart_scale / frequency
+
+        def oscillatory(z):
+            angle = frequency * float(z[0]) + phase
+            probability = 0.5 + amplitude * math.sin(angle)
+            return np.array([probability, 1.0 - probability])
+
+        probability = 0.5 + amplitude * math.sin(phase)
+        first = amplitude * frequency * math.cos(phase)
+        second = -(amplitude * frequency**2) * math.sin(phase)
+        denominator = probability * (1.0 - probability)
+        exact_first_kind = (
+            first * second / denominator
+            - 0.5
+            * first**3
+            * (1.0 - 2.0 * probability)
+            / denominator**2
+        )
+        packet = build_packet(
+            oscillatory,
+            [0.0],
+            step,
+            metric_floor=1e-30,
+        )
+        relative_first_kind_error = abs(
+            packet.first_kind[0, 0, 0] - exact_first_kind
+        ) / abs(exact_first_kind)
+
+        self.assertGreater(relative_first_kind_error, 0.1)
+        # The dimensionless floor is far too small to rescue a genuine
+        # order-ten-percent defect in the raised connection.
+        self.assertEqual(packet.refinement_atol, 1e-6)
+        self.assertFalse(packet.accepted)
+        self.assertEqual(packet.rejection_reason, "refinement")
+        self.assertGreater(packet.refinement_tolerance_ratio, 1.0)
+
+    def test_structurally_zero_tensors_are_not_rejected_for_roundoff(self):
+        """A vanishing L or C must not be compared against its own roundoff.
+
+        The paper's boundary Bernoulli family has ``Gamma^LC = 0`` identically,
+        and an antipodal head has ``L = C = 0`` at the symmetric point.  Both
+        are exactly representable geometries, so both must be accepted.
+        """
+
+        for theta in (1.0, math.pi / 2.0):
+            packet = build_packet(bernoulli_family(), [theta], 1e-4)
+            self.assertTrue(packet.accepted, msg=f"theta={theta}")
+            np.testing.assert_allclose(packet.metric, [[1.0]], atol=1e-8)
+
+        rng = np.random.default_rng(3)
+        block = rng.normal(size=(4, 2))
+        packet = build_packet(
+            affine_family(np.vstack([block, -block])), [0.0, 0.0], 1e-3
+        )
+        self.assertTrue(packet.accepted)
+        self.assertLess(np.abs(packet.first_kind).max(), 1e-12)
+        self.assertLess(np.abs(packet.cubic).max(), 1e-12)
+
+    def test_refinement_verdict_is_invariant_to_chart_units(self):
+        """``z -> z/s`` with ``h -> h/s`` is a relabelling, not an experiment.
+
+        It rescales ``(G, L, C)`` by ``(s^2, s^3, s^3)``.  The refinement
+        diagnostic compares invariants, so its values and verdict must not
+        move with ``s``.  This deliberately inaccurate fixture would be
+        rescued at small ``s`` by the former dimensionful raw-tensor floor.
+        """
+
+        base_step = 0.1
+        phase = 0.4
+        frequency = 5.0 / base_step
+        amplitude = 1e-4 / frequency
+        errors = []
+        absolute_errors = []
+        tolerance_ratios = []
+        for scale in (1.0, 1e-2, 1e-4, 1e-6):
+            def rescaled_oscillatory(z, *, _scale=scale):
+                angle = frequency * _scale * float(z[0]) + phase
+                probability = 0.5 + amplitude * math.sin(angle)
+                return np.array([probability, 1.0 - probability])
+
+            packet = build_packet(
+                rescaled_oscillatory,
+                [0.0],
+                base_step / scale,
+                metric_floor=1e-30,
+            )
+            self.assertFalse(packet.accepted, msg=f"scale={scale}")
+            self.assertEqual(packet.rejection_reason, "refinement")
+            errors.append(packet.refinement_error)
+            absolute_errors.append(packet.refinement_absolute_error)
+            tolerance_ratios.append(packet.refinement_tolerance_ratio)
+
+        for diagnostics in (errors, absolute_errors, tolerance_ratios):
+            np.testing.assert_allclose(
+                diagnostics,
+                np.full(len(diagnostics), diagnostics[0]),
+                rtol=1e-12,
+                atol=0.0,
+            )
+
+    def test_absolute_metric_floor_is_labeled_as_chart_scale(self):
+        packet = build_packet(
+            affine_family(np.array([[0.0], [1e-6], [-1e-6]])),
+            [0.2],
+            1e-3,
+        )
+        self.assertFalse(packet.accepted)
+        self.assertEqual(packet.rejection_reason, "metric_scale")
+
     def test_packet_builder_rejects_invalid_simplex_maps(self):
         def negative(z):
             value = float(z[0])
@@ -501,7 +791,9 @@ class TestAuditsAndGates(unittest.TestCase):
 
     def test_serialization_roundtrip_and_checksum(self):
         rng = np.random.default_rng(47)
-        packet = build_packet(affine_family(rng.normal(size=(6, 2))), [0.1, -0.1], 1e-3)
+        packet = with_test_provenance(
+            build_packet(affine_family(rng.normal(size=(6, 2))), [0.1, -0.1], 1e-3)
+        )
         payload = packet_to_dict(packet)
         restored = packet_from_dict(payload)
         self.assertIsInstance(restored, ConnectionPacket)
@@ -528,8 +820,8 @@ class TestAuditsAndGates(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "checksum"):
             packet_from_dict(metadata_payload)
 
-    def test_packet_v3_checksum_has_cross_language_golden_vector(self):
-        packet = ConnectionPacket(
+    def test_packet_v6_checksum_has_cross_language_golden_vector(self):
+        packet = with_test_provenance(ConnectionPacket(
             z=np.array([0.5]),
             step=0.125,
             q=np.array([0.25, 0.75]),
@@ -541,24 +833,149 @@ class TestAuditsAndGates(unittest.TestCase):
             refinement_error=0.0625,
             accepted=True,
             rejection_reason="",
-        )
+        ))
         payload = packet_to_dict(packet, max_quantization_error=0.0)
-        self.assertEqual(payload["checksum"], "03fff643f090b5aed8dbc1eaadf388bb")
+        self.assertEqual(payload["checksum"], "2671145857178851b807996e69e8d9f0")
+
+    def test_serialization_requires_reproducible_provenance_by_default(self):
+        packet = build_packet(
+            affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3
+        )
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            packet_to_dict(packet)
+
+    def test_serialization_rejects_point_outside_provenance_bounds(self):
+        packet = with_test_provenance(
+            build_packet(
+                affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3
+            )
+        )
+        outside = replace(
+            packet,
+            provenance=replace(packet.provenance, chart_bounds=((0.3, 0.4),)),
+        )
+        with self.assertRaisesRegex(ValueError, "outside"):
+            packet_to_dict(outside)
+
+    def test_builder_rejects_out_of_bounds_stencil_before_teacher_call(self):
+        evaluations = []
+        provenance = PacketProvenance(
+            teacher_model_id="test/model",
+            teacher_revision="0123456789abcdef",
+            tokenizer_hash="sha256:test-tokenizer",
+            outcome_map_hash="sha256:test-outcomes",
+            chart_id="bounded-chart",
+            chart_bounds=((0.0, 1.0),),
+            context_id="test-context",
+            inference_dtype="float64",
+            reproducible=True,
+        )
+
+        def q_fn(z):
+            evaluations.append(float(z[0]))
+            return softmax(np.array([0.0, float(z[0]), -float(z[0])]))
+
+        with self.assertRaisesRegex(ValueError, "stencil.*outside"):
+            build_packet(q_fn, [0.01], 0.02, provenance=provenance)
+        self.assertEqual(evaluations, [])
+
+    def test_serialization_rejects_forged_rejection_reason(self):
+        packet = with_test_provenance(
+            build_packet(
+                affine_family(
+                    np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
+                ),
+                [0.2, -0.1],
+                1e-3,
+            )
+        )
+        forged = replace(packet, accepted=False, rejection_reason="rank")
+        with self.assertRaisesRegex(ValueError, "recomputed gate"):
+            packet_to_dict(forged)
+
+    def test_serialization_rejects_metric_made_singular_by_float32(self):
+        packet = with_test_provenance(
+            build_packet(
+                affine_family(
+                    np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
+                ),
+                [0.2, -0.1],
+                1e-3,
+            )
+        )
+        fragile_metric = np.array([[1.0, 1.0], [1.0, 1.0 + 4e-10]])
+        fragile = replace(
+            packet,
+            metric=fragile_metric,
+            metric_eigenvalues=np.linalg.eigvalsh(fragile_metric),
+        )
+        self.assertGreater(fragile.metric_eigenvalues.min(), fragile.metric_floor)
+        self.assertEqual(
+            np.linalg.eigvalsh(fragile_metric.astype(np.float32)).min(),
+            0.0,
+        )
+        with self.assertRaisesRegex(ValueError, "serialization changes.*rank"):
+            packet_to_dict(fragile)
+
+    def test_serialization_rejects_nonsymmetric_accepted_metric(self):
+        packet = with_test_provenance(
+            build_packet(
+                affine_family(
+                    np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
+                ),
+                [0.2, -0.1],
+                1e-3,
+            )
+        )
+        bad_metric = packet.metric.copy()
+        bad_metric[0, 1] += 0.1
+        corrupted = replace(
+            packet,
+            metric=bad_metric,
+            metric_eigenvalues=np.linalg.eigvalsh(bad_metric),
+        )
+        with self.assertRaisesRegex(ValueError, "symmetric"):
+            packet_to_dict(corrupted)
 
     def test_serialization_enforces_quantization_tolerance(self):
-        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        packet = with_test_provenance(
+            build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        )
         with self.assertRaisesRegex(ValueError, "quantization"):
             packet_to_dict(packet, max_quantization_error=0.0)
 
+    def test_quantization_error_is_invariant_to_uniform_tensor_scale(self):
+        packet = build_packet(
+            affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3
+        )
+        scaled = replace(
+            packet,
+            metric=packet.metric * 1e-12,
+            first_kind=packet.first_kind * 1e-12,
+            cubic=packet.cubic * 1e-12,
+        )
+        original_error = quantization_error(packet)
+        scaled_error = quantization_error(scaled)
+        # Binary32 rounding depends on the scaled mantissas, so exact equality
+        # is not expected. Both errors must nevertheless remain on the same
+        # relative scale; the old max(1, ||T||) rule suppressed the latter by
+        # twelve orders of magnitude.
+        self.assertGreater(scaled_error, 0.5 * original_error)
+        self.assertLess(scaled_error, 2.0 * original_error)
+
     def test_serialization_rejects_wrong_schema(self):
-        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        packet = with_test_provenance(
+            build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        )
         payload = packet_to_dict(packet)
         payload["schema_version"] = "pcd-packet-1"
         with self.assertRaisesRegex(ValueError, "schema"):
             packet_from_dict(payload)
 
     def test_serialization_is_strict_json_and_rejects_nonfinite(self):
-        packet = build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        packet = with_test_provenance(
+            build_packet(affine_family(np.array([[0.0], [1.0], [-1.0]])), [0.2], 1e-3)
+        )
         payload = packet_to_dict(packet)
         # The emitted body must survive a strict JSON round trip so that
         # other languages and strict parsers read identical shards.
@@ -567,17 +984,17 @@ class TestAuditsAndGates(unittest.TestCase):
             packet_from_dict(reparsed).metric, packet.metric, rtol=1e-6, atol=1e-6
         )
         corrupted = replace(packet, refinement_error=math.nan)
-        with self.assertRaisesRegex(ValueError, "non-finite"):
+        with self.assertRaisesRegex(ValueError, "finite"):
             packet_to_dict(corrupted)
 
     def test_large_metric_eigenvalues_use_measured_quantization_bound(self):
-        packet = build_packet(
+        packet = with_test_provenance(build_packet(
             affine_family(
                 np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]])
             ),
             [0.2, -0.1],
             1e-3,
-        )
+        ))
         angle = 0.37
         rotation = np.array(
             [
@@ -615,7 +1032,9 @@ class TestAuditsAndGates(unittest.TestCase):
             value = float(np.atleast_1d(z)[0])
             return np.asarray(offsets + slopes * value, dtype=np.float64)
 
-        packet = build_packet_from_logits(logits_fn, [0.1], 1e-3)
+        packet = with_test_provenance(
+            build_packet_from_logits(logits_fn, [0.1], 1e-3)
+        )
         self.assertTrue(packet.accepted)
         self.assertTrue(np.all(np.isfinite(packet.cubic)))
         self.assertFalse(np.all(np.isfinite(packet.cubic_audit)))
@@ -631,6 +1050,23 @@ class TestAuditsAndGates(unittest.TestCase):
         inconsistent["cubic_audit"] = np.zeros((1, 1, 1)).tolist()
         with self.assertRaises(ValueError):
             packet_from_dict(inconsistent)
+
+    def test_serialization_rejects_accepted_negative_metric(self):
+        packet = with_test_provenance(ConnectionPacket(
+            z=np.array([0.0]),
+            step=1e-3,
+            q=np.array([0.5, 0.5]),
+            metric=np.array([[-1.0]]),
+            first_kind=np.zeros((1, 1, 1)),
+            cubic=np.zeros((1, 1, 1)),
+            cubic_audit=np.zeros((1, 1, 1)),
+            metric_eigenvalues=np.array([-1.0]),
+            refinement_error=0.0,
+            accepted=True,
+            rejection_reason="",
+        ))
+        with self.assertRaisesRegex(ValueError, "positive definite"):
+            packet_to_dict(packet)
 
 
 if __name__ == "__main__":

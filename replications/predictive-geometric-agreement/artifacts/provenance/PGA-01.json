@@ -1,0 +1,29 @@
+{
+  "artifact_sha256": "9ec43eed67bc4683bbe67754a7c224ef61795d30fd89aeb35521c9f2a5e27f3d",
+  "baseline_faithful": true,
+  "claim_mode": "baseline",
+  "code_path": "code/pga_01_kl_counterexample.py",
+  "code_sha256": "5e7a45b55ab9f9b1fe3de08d6598152613956eacae7f521a56b3e1987f514211",
+  "config_path": "config/pga-01.json",
+  "config_sha256": "b2ea97d1233c8ec8d69e662532321ce16ae9f30e1eaf2b487ee66fdc2d2dae25",
+  "created_at": "2026-08-19T13:43:21Z",
+  "deviation_notes": "none",
+  "generated_by": "paper_harness.register-target-artifact",
+  "implementation_kind": "paper-method",
+  "implementation_summary": "Directly implements the paper-defined Bernoulli families, evaluates their KL divergence on a declared dense grid, and independently computes the exact pullback Fisher metric constants.",
+  "kind": "table",
+  "method_components": [
+    "Bernoulli KL evaluation",
+    "pullback Fisher metric at x=0",
+    "log-log rate audit"
+  ],
+  "method_label": "Independent Bernoulli KL-to-Fisher counterexample",
+  "output_path": "artifacts/tables/pga-01-kl-counterexample.json",
+  "paper_trace_path": "spec/math_audit.md",
+  "paper_trace_sha256": "711eb09b38836bd8f35635c28579cc0e58b5da6c8901f98ba207b0e88f7ca150",
+  "run_id": "run-0002",
+  "run_record_path": "artifacts/runs/run-0002/record.json",
+  "schema_version": 1,
+  "seed": "0",
+  "target_id": "PGA-01"
+}

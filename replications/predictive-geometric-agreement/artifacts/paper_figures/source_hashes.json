@@ -1,0 +1,25 @@
+{
+  "entries": [
+    {
+      "entry_kind": "other",
+      "path": "main.bbl",
+      "sha256": "32c997f4bd149f90be33f4e11f5ba38be3bb7c7b90f38bbc16f3cde7232a4a4f"
+    },
+    {
+      "entry_kind": "other",
+      "path": "main.tex",
+      "sha256": "8628a0f806f5fd9808213f80f93997eb07a51870b5911bd26525ef2ea69f7c59"
+    },
+    {
+      "entry_kind": "other",
+      "path": "README.md",
+      "sha256": "45e8bbade13b8eb5dfc8700727158cb8cf6426868a072b8d2f0f061983bc375c"
+    },
+    {
+      "entry_kind": "other",
+      "path": "references.bib",
+      "sha256": "3d9fb57a721f66fc8e5d57f6027a6e9df3b2cb8eb4e5a3f283c5d0c5e43ac561"
+    }
+  ],
+  "source_root": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\paper"
+}

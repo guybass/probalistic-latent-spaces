@@ -12,16 +12,20 @@ import argparse
 import gc
 import hashlib
 import json
+import platform
+import subprocess
+import sys
+from importlib import metadata
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
+from huggingface_hub import try_to_load_from_cache
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from predictive_geometry.benchmark import evaluate_quadrilateral
 from predictive_geometry.softmax import SoftmaxHessianGeometry
-
 
 FACTORIALS = (
     {
@@ -46,6 +50,111 @@ FACTORIALS = (
         "p11": "The dogs are",
     },
 )
+
+RESULT_SCHEMA_VERSION = "pythia-smoke-2"
+
+
+def _sha256_json(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
+
+
+def _repository_metadata() -> dict[str, Any]:
+    root = Path(__file__).resolve().parents[1]
+
+    def git(*arguments: str) -> str | None:
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    f"safe.directory={root.as_posix()}",
+                    *arguments,
+                ],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return result.stdout.strip()
+
+    status = git("status", "--porcelain")
+    return {
+        "git_commit": git("rev-parse", "HEAD"),
+        "git_dirty": None if status is None else bool(status),
+        "driver_hash": _sha256_file(Path(__file__).resolve()),
+        "pyproject_hash": _sha256_file(root / "pyproject.toml"),
+        "core_lock_hash": _sha256_file(root / "requirements-lock.txt"),
+        "model_lock_hash": _sha256_file(root / "requirements-model-lock.txt"),
+    }
+
+
+def _runtime_metadata() -> dict[str, Any]:
+    package_versions: dict[str, str | None] = {}
+    for package in ("numpy", "torch", "transformers", "safetensors"):
+        try:
+            package_versions[package] = metadata.version(package)
+        except metadata.PackageNotFoundError:
+            package_versions[package] = None
+    return {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "packages": package_versions,
+    }
+
+
+def _tokenizer_hashes(tokenizer: Any) -> tuple[str, str]:
+    vocabulary = sorted(tokenizer.get_vocab().items())
+    outcome_map_hash = _sha256_json(vocabulary)
+    backend = getattr(tokenizer, "backend_tokenizer", None)
+    tokenizer_state = backend.to_str() if backend is not None else vocabulary
+    tokenizer_hash = _sha256_json(
+        {
+            "state": tokenizer_state,
+            "special_tokens_map": tokenizer.special_tokens_map,
+        }
+    )
+    return tokenizer_hash, outcome_map_hash
+
+
+def _cached_snapshot_commit(
+    model_name: str,
+    revision: str,
+    cache_dir: Path,
+    filenames: tuple[str, ...],
+) -> str | None:
+    """Resolve a cached Hub snapshot without treating a symbolic ref as immutable."""
+
+    for filename in filenames:
+        cached = try_to_load_from_cache(
+            model_name,
+            filename,
+            revision=revision,
+            cache_dir=cache_dir,
+        )
+        if not isinstance(cached, str):
+            continue
+        path = Path(cached)
+        try:
+            snapshot_index = path.parts.index("snapshots")
+        except ValueError:
+            continue
+        if snapshot_index + 1 < len(path.parts):
+            return path.parts[snapshot_index + 1]
+    return None
 
 
 def extract(
@@ -123,6 +232,20 @@ def run_checkpoint(
         dtype=torch.float32,
     )
     model.eval()
+    tokenizer_hash, outcome_map_hash = _tokenizer_hashes(tokenizer)
+    resolved_model_revision = getattr(model.config, "_commit_hash", None)
+    resolved_tokenizer_revision = tokenizer.init_kwargs.get(
+        "_commit_hash"
+    ) or _cached_snapshot_commit(
+        model_name,
+        revision,
+        cache_dir,
+        ("tokenizer.json", "tokenizer_config.json", "vocab.json"),
+    )
+    if not resolved_model_revision or not resolved_tokenizer_revision:
+        raise RuntimeError(
+            "the model and tokenizer must expose immutable resolved snapshot commits"
+        )
     unembedding = (
         model.get_output_embeddings().weight.detach().cpu().double().numpy()
     )
@@ -322,6 +445,7 @@ def run_checkpoint(
         checkpoint_results.append(
             {
                 "design": design,
+                "control_seed": control_seed,
                 "base_entropy_nats": entropy,
                 "top_next_tokens": top_tokens,
                 "logit_reconstruction_max_abs_error": reconstruction_error,
@@ -340,10 +464,16 @@ def run_checkpoint(
 
     result = {
         "model": model_name,
-        "revision": revision,
+        "requested_revision": revision,
+        "resolved_model_revision": resolved_model_revision,
+        "resolved_tokenizer_revision": resolved_tokenizer_revision,
+        "model_run_id": f"{model_name}@{resolved_model_revision or revision}",
+        "model_training_seed": None,
+        "tokenizer_hash": tokenizer_hash,
+        "outcome_map_hash": outcome_map_hash,
         "hidden_dim": int(unembedding.shape[1]),
         "vocabulary_size": int(unembedding.shape[0]),
-        "random_seed": seed,
+        "base_control_seed": seed,
         "control_planes_per_context": random_planes,
         "control_mode": control_mode,
         "metric_eigenvalue_rtol": metric_eigenvalue_rtol,
@@ -395,6 +525,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threads", type=int, default=4)
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument(
+        "--allow-dirty-repository",
+        action="store_true",
+        help="allow a provenance-marked nonreproducible run from a dirty checkout",
+    )
+    parser.add_argument(
         "--cache-dir",
         type=Path,
         default=Path("artifacts/hf_cache"),
@@ -434,12 +569,31 @@ def main() -> None:
         raise ValueError("--log10-band-width must be finite and positive")
     torch.set_num_threads(args.threads)
     args.cache_dir.mkdir(parents=True, exist_ok=True)
+    repository = _repository_metadata()
+    if (
+        repository["git_commit"] is None or repository["git_dirty"] is not False
+    ) and not args.allow_dirty_repository:
+        raise RuntimeError(
+            "refusing a scientific artifact without a clean identified repository; "
+            "commit the checkout or pass --allow-dirty-repository for an explicitly "
+            "nonreproducible smoke run"
+        )
+    repository["dirty_run_allowed"] = args.allow_dirty_repository
     payload = {
+        "result_schema_version": RESULT_SCHEMA_VERSION,
         "experiment": (
             "secondary finite-chord final-decoder Fisher curvature "
             "and connection diagnostic"
         ),
         "device": "cpu",
+        "repository": repository,
+        "runtime": _runtime_metadata(),
+        "design_hash": _sha256_json(FACTORIALS),
+        "replication": {
+            "model_training_runs": 1,
+            "checkpoint_is_repeated_measurement": True,
+            "base_control_seed": args.seed,
+        },
         "checkpoints": [
             run_checkpoint(
                 args.model,

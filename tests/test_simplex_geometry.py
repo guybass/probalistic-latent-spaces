@@ -38,6 +38,51 @@ class SimplexGeometryTests(unittest.TestCase):
         )
         np.testing.assert_allclose(reconstructed, self.q, atol=1e-12)
 
+    def test_fisher_small_distance_does_not_collapse_to_zero(self) -> None:
+        p = np.array([0.5, 0.5])
+        q = np.array([0.5 + 1e-8, 0.5 - 1e-8])
+        distance = fisher_distance(p, q)
+        self.assertGreater(distance, 0.0)
+        self.assertAlmostEqual(distance, 2e-8, places=15)
+        np.testing.assert_allclose(fisher_exp(p, fisher_log(p, q)), q, atol=1e-15)
+        self.assertEqual(fisher_distance(p, p), 0.0)
+
+    def test_exponential_log_exp_round_trip_near_boundary(self) -> None:
+        epsilon = 1e-20
+        p = np.array([1.0 - epsilon, epsilon])
+        q = np.array([epsilon, 1.0 - epsilon])
+        reconstructed = exponential_exp(p, exponential_log(p, q))
+        np.testing.assert_allclose(reconstructed, q, rtol=1e-14, atol=0.0)
+
+    def test_fisher_log_exp_round_trip_near_boundary(self) -> None:
+        epsilon = 1e-20
+        p = np.array([1.0 - epsilon, epsilon])
+        q = np.array([epsilon, 1.0 - epsilon])
+        reconstructed = fisher_exp(p, fisher_log(p, q))
+        np.testing.assert_allclose(reconstructed, q, rtol=2e-6, atol=0.0)
+
+    def test_unrepresentable_exponential_scores_fail_closed(self) -> None:
+        p = np.array([np.nextafter(0.0, 1.0), 1.0])
+        u = np.array([1e-3, -1e-3])
+        with self.assertRaisesRegex(ValueError, "not representable"):
+            exponential_exp(p, u)
+        with self.assertRaisesRegex(ValueError, "not representable"):
+            exponential_parallel_transport(p, p, u)
+
+    def test_unrepresentable_fisher_tangent_fails_closed(self) -> None:
+        p = np.array([np.nextafter(0.0, 1.0), 1.0])
+        u = np.array([1e150, -1e150])
+        with self.assertRaisesRegex(ValueError, "not representable"):
+            fisher_exp(p, u)
+        with self.assertRaisesRegex(ValueError, "not representable"):
+            fisher_parallel_transport(p, p, u)
+
+    def test_unrepresentable_exponential_endpoint_fails_closed(self) -> None:
+        p = np.array([0.5, 0.5])
+        u = np.array([500.0, -500.0])
+        with self.assertRaisesRegex(ValueError, "endpoint.*not representable"):
+            exponential_exp(p, u)
+
     def test_fisher_transport_is_metric_compatible(self) -> None:
         transported = fisher_parallel_transport(self.p, self.q, self.u)
         before = fisher_inner(self.p, self.u, self.u)

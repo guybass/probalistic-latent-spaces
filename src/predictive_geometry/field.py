@@ -22,7 +22,6 @@ from numpy.typing import ArrayLike, NDArray
 
 from .softmax import SoftmaxHessianGeometry
 
-
 Vector = NDArray[np.float64]
 Matrix = NDArray[np.float64]
 

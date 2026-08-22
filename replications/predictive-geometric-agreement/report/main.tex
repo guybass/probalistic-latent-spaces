@@ -1,0 +1,41 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{verbatim}
+\title{Replication Report: Predictive Geometric Agreement}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Overview}
+This report records an independent, target-level audit of the manuscript's
+mathematical and computational claims. Existing author implementation code is
+excluded from baseline evidence. The report remains incomplete while any target
+in the reproduction matrix is unmatched.
+
+\section{Targets}
+
+\subsection{Regular KL-to-geometry counterexample}
+\label{tab:pga-01}
+The machine-readable numeric evidence for PGA-01 is embedded below.
+\verbatiminput{../artifacts/tables/pga-01-kl-counterexample.json}
+
+% Example:
+% \begin{figure}[H]
+%   \centering
+%   \includegraphics[width=0.9\linewidth]{artifacts/figures/example.png}
+%   \caption{Reproduced target.}
+%   \label{fig:example}
+% \end{figure}
+% report_anchor=fig:example
+
+\section{Notes}
+Record deviations, residual gaps, and hardware/runtime notes here.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+\end{document}

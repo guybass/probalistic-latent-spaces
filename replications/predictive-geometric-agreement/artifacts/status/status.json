@@ -1,0 +1,63 @@
+{
+  "active_target": "PGA-02",
+  "cluster_delegate": {
+    "available": false,
+    "command": [],
+    "command_string": "",
+    "mode": "auto",
+    "project_reproduce_script": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\replications\\predictive-geometric-agreement\\scripts\\reproduce_all.ps1",
+    "script_path": ""
+  },
+  "cluster_transport": {},
+  "completion_errors": [
+    "Paper replication is incomplete. Remaining targets are not MATCHED: PGA-02:ACTIVE, PGA-03:PLANNED, PGA-04:PLANNED, PGA-05:PLANNED, PGA-06:PLANNED, PGA-07:PLANNED, PGA-08:PLANNED.",
+    "Paper replication is incomplete while an ACTIVE target remains in reproduction_matrix.csv.",
+    "Paper replication is incomplete while todo.md Active target is still set.",
+    "report/main.pdf is missing. Compile the final report PDF before claiming completion."
+  ],
+  "completion_ok": false,
+  "incomplete_targets": [
+    {
+      "status": "ACTIVE",
+      "target_id": "PGA-02"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-03"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-04"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-05"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-06"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-07"
+    },
+    {
+      "status": "PLANNED",
+      "target_id": "PGA-08"
+    }
+  ],
+  "next_action": "Continue the ACTIVE target `PGA-02` until it is genuinely MATCHED, then advance the remaining incomplete targets.",
+  "paper_slug": "predictive-geometric-agreement",
+  "paper_title": "Predictive Geometric Agreement",
+  "phase": "independent-replication",
+  "progress_errors": [],
+  "progress_ok": true,
+  "project_dir": "C:\\Users\\Lenovo i7\\Documents\\apllied_math\\replications\\predictive-geometric-agreement",
+  "spec_errors": [],
+  "spec_ok": true,
+  "status_counts": {
+    "ACTIVE": 1,
+    "MATCHED": 1,
+    "PLANNED": 6
+  }
+}
